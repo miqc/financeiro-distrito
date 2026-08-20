@@ -90,8 +90,32 @@ const dashboardStyles = `
     font-weight: 700;
   }
 
+  .dashboard-filter-field[for="dashboard-month"] {
+    display: grid;
+    gap: 0.375rem;
+    width: 100%;
+    max-width: 100%;
+    color: var(--color-text);
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
   .dashboard-filter-field input {
     width: 100%;
+    min-height: 2.75rem;
+    padding: 0.625rem 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+  }
+
+  .dashboard-filter-field[for="dashboard-month"] input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     background: var(--color-surface);
@@ -132,36 +156,23 @@ const dashboardStyles = `
     display: grid;
     min-height: 9rem;
     align-content: space-between;
-    gap: 1rem;
-    padding: clamp(1rem, 3vw, 1.375rem);
+    gap: 1.25rem;
+    padding: clamp(1.25rem, 4vw, 1.75rem);
     overflow: hidden;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-left: 0.3rem solid var(--color-primary);
+    border: 1px solid rgb(0 0 0 / 5%);
     border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-surface);
-  }
-
-  .dashboard-card--expense {
-    border-left-color: #3d3d3d;
-  }
-
-  .dashboard-card--goal {
-    border-left-color: #777777;
-  }
-
-  .dashboard-card--salary {
-    border-left-color: var(--color-primary-strong);
+    box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 5%);
   }
 
   .dashboard-card__label,
   .dashboard-card__detail {
-    color: var(--color-text-muted);
+    color: #737373;
   }
 
   .dashboard-card__label {
-    font-size: 0.875rem;
-    font-weight: 700;
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .dashboard-card__value {
@@ -173,7 +184,7 @@ const dashboardStyles = `
   }
 
   .dashboard-card__detail {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
   }
 
   .dashboard-daily {
@@ -248,6 +259,12 @@ const dashboardStyles = `
     background: var(--color-surface-muted);
     border-bottom: 0;
     font-weight: 800;
+  }
+
+  @media (min-width: 48rem) {
+    .dashboard-filter-field[for="dashboard-month"] {
+      width: min(100%, 13rem);
+    }
   }
 
   @media (max-width: 30rem) {

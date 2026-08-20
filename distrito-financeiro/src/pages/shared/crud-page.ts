@@ -62,8 +62,11 @@ const crudStyles = `
     display: none !important;
   }
 
+  dialog:not([open]) {
+    display: none !important;
+  }
+
   .crud-page__header,
-  .crud-form,
   .crud-records {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -95,12 +98,104 @@ const crudStyles = `
     text-transform: capitalize;
   }
 
+  .crud-page__header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .crud-open-drawer,
+  .crud-drawer__close {
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-weight: 750;
+  }
+
+  .crud-open-drawer {
+    padding: 0.625rem 1rem;
+    color: #ffffff;
+    background: var(--crud-accent-strong);
+  }
+
+  .crud-open-drawer:hover {
+    background: var(--crud-accent);
+  }
+
+  .crud-drawer {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    background: transparent;
+    border: none;
+  }
+
+  .crud-drawer::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+  }
+
+  .crud-drawer[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .crud-drawer__header {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem clamp(1rem, 3vw, 1.5rem);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .crud-drawer__header h3 {
+    font-size: 1.125rem;
+  }
+
+  .crud-drawer__close {
+    display: grid;
+    width: 2.75rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+    line-height: 1;
+  }
+
+  .crud-drawer__close:hover {
+    color: var(--color-text);
+  }
+
   .crud-form {
     display: grid;
     grid-template-columns: minmax(9rem, 0.85fr) minmax(14rem, 2fr) minmax(9rem, 0.85fr) auto;
     align-items: end;
+    width: min(calc(100% - 2rem), 62rem);
+    max-width: 62rem;
+    max-height: min(90vh, 48rem);
+    max-height: min(90dvh, 48rem);
     gap: 0.875rem;
     padding: clamp(1rem, 3vw, 1.5rem);
+    overflow: auto;
+    background: var(--color-surface);
+    border-radius: var(--radius-medium);
+    box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
+  }
+
+  .crud-drawer[open] > .crud-form {
+    animation: crud-modal-enter 160ms ease-out;
   }
 
   .crud-form--with-catalog {
@@ -110,10 +205,10 @@ const crudStyles = `
   .crud-field {
     display: grid;
     min-width: 0;
-    gap: 0.375rem;
-    color: var(--color-text);
+    gap: 0.5rem;
+    color: var(--color-text-muted);
     font-size: 0.8125rem;
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .crud-field input,
@@ -121,8 +216,9 @@ const crudStyles = `
     width: 100%;
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
+    color: var(--color-text);
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid #ddddda;
     border-radius: var(--radius-small);
   }
 
@@ -282,6 +378,28 @@ const crudStyles = `
     text-align: center;
   }
 
+  @keyframes crud-modal-enter {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes crud-drawer-enter {
+    from {
+      transform: translateY(100%);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
   @media (max-width: 64rem) {
     .crud-form {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -293,8 +411,42 @@ const crudStyles = `
   }
 
   @media (max-width: 40rem) {
+    .crud-page__header-actions,
+    .crud-open-drawer {
+      width: 100%;
+    }
+
+    .crud-page__header-actions {
+      justify-content: stretch;
+    }
+
+    .crud-page__period {
+      flex: 1;
+    }
+
+    .crud-drawer[open] {
+      align-items: flex-end;
+    }
+
+    .crud-drawer .crud-form {
+      width: 100%;
+      max-width: 100%;
+      max-height: calc(100dvh - 0.75rem);
+      margin-top: auto;
+      margin-right: 0;
+      margin-bottom: 0;
+      margin-left: 0;
+      border-radius: 1rem 1rem 0 0;
+    }
+
+    .crud-drawer[open] > .crud-form {
+      animation: crud-drawer-enter 200ms ease-out;
+    }
+
     .crud-form {
       grid-template-columns: minmax(0, 1fr);
+      gap: 1.125rem;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
     }
 
     .crud-list-header {
@@ -302,30 +454,63 @@ const crudStyles = `
     }
 
     .crud-list-item {
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 0.375rem 0.75rem;
-      padding-block: 0.875rem;
+      grid-template-columns: minmax(0, 1fr) auto 2.25rem;
+      grid-template-rows: auto auto;
+      gap: 0.25rem 0.75rem;
+      min-height: 4.75rem;
+      padding-block: 1rem;
+      border-bottom-color: rgb(0 0 0 / 7%);
     }
 
     .crud-list-item__description {
       grid-column: 1;
       grid-row: 1;
+      align-self: end;
+      font-weight: 700;
     }
 
     .crud-list-item__date {
       grid-column: 1;
       grid-row: 2;
+      align-self: start;
+      color: #737373;
+      font-size: 0.75rem;
     }
 
     .crud-list-item__amount {
-      grid-column: 1;
-      grid-row: 3;
-      text-align: left;
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+      font-weight: 700;
+      text-align: right;
     }
 
     .crud-delete-button {
-      grid-column: 2;
-      grid-row: 1 / span 3;
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      align-self: center;
+      width: 2.25rem;
+      min-height: 2.25rem;
+      color: var(--color-text-muted);
+      background: transparent;
+      opacity: 0.7;
+    }
+
+    .crud-delete-button:hover:not(:disabled) {
+      color: var(--color-text-muted);
+      background: transparent;
+    }
+
+    .crud-delete-button:active:not(:disabled) {
+      color: #ffffff;
+      background: var(--color-danger);
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .crud-drawer[open] > .crud-form {
+      animation: none;
     }
   }
 `;
@@ -403,48 +588,67 @@ export async function renderCrudPage<T extends CrudRecord>(
           <p class="crud-page__eyebrow">Lançamentos</p>
           <h2 id="crud-page-title"></h2>
         </div>
-        <p class="crud-page__period"></p>
+        <div class="crud-page__header-actions">
+          <p class="crud-page__period"></p>
+          <button class="crud-open-drawer" type="button">
+            Adicionar lançamento
+          </button>
+        </div>
       </header>
 
-      <form class="crud-form">
-        <label class="crud-field" for="crud-date">
-          Data
-          <input id="crud-date" name="date" type="date" required />
-        </label>
+      <dialog class="crud-drawer" aria-labelledby="crud-drawer-title">
+        <form class="crud-form">
+          <header class="crud-drawer__header">
+            <h3 id="crud-drawer-title">Novo lançamento</h3>
+            <button
+              class="crud-drawer__close"
+              type="button"
+              aria-label="Cancelar e fechar formulário"
+              title="Cancelar"
+            >
+              ×
+            </button>
+          </header>
 
-        <label class="crud-field" for="crud-description">
-          Descrição
-          <input
-            id="crud-description"
-            name="description"
-            type="text"
-            maxlength="160"
-            autocomplete="off"
-            placeholder="Digite uma descrição"
-            required
-          />
-        </label>
+          <label class="crud-field" for="crud-date">
+            Data
+            <input id="crud-date" name="date" type="date" required />
+          </label>
 
-        <label class="crud-field" for="crud-amount">
-          Valor
-          <input
-            id="crud-amount"
-            name="amount"
-            type="number"
-            min="0"
-            step="0.01"
-            inputmode="decimal"
-            placeholder="0,00"
-            required
-          />
-        </label>
+          <label class="crud-field" for="crud-description">
+            Descrição
+            <input
+              id="crud-description"
+              name="description"
+              type="text"
+              maxlength="160"
+              autocomplete="off"
+              placeholder="Digite uma descrição"
+              required
+            />
+          </label>
 
-        <button class="crud-submit-button" type="submit">
-          Adicionar lançamento
-        </button>
+          <label class="crud-field" for="crud-amount">
+            Valor
+            <input
+              id="crud-amount"
+              name="amount"
+              type="number"
+              min="0"
+              step="0.01"
+              inputmode="decimal"
+              placeholder="0,00"
+              required
+            />
+          </label>
 
-        <p class="crud-feedback" role="status" aria-live="polite" hidden></p>
-      </form>
+          <button class="crud-submit-button" type="submit">
+            Salvar lançamento
+          </button>
+
+          <p class="crud-feedback" role="status" aria-live="polite" hidden></p>
+        </form>
+      </dialog>
 
       <section class="crud-records" aria-labelledby="crud-records-title">
         <header class="crud-records__header">
@@ -467,6 +671,18 @@ export async function renderCrudPage<T extends CrudRecord>(
   const page = getRequiredElement<HTMLElement>(container, '.crud-page');
   const title = getRequiredElement<HTMLElement>(container, '#crud-page-title');
   const period = getRequiredElement<HTMLElement>(container, '.crud-page__period');
+  const drawer = getRequiredElement<HTMLDialogElement>(
+    container,
+    '.crud-drawer',
+  );
+  const openDrawerButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.crud-open-drawer',
+  );
+  const closeDrawerButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.crud-drawer__close',
+  );
   const form = getRequiredElement<HTMLFormElement>(container, '.crud-form');
   const dateInput = getRequiredElement<HTMLInputElement>(container, '#crud-date');
   const descriptionInput = getRequiredElement<HTMLInputElement>(
@@ -500,6 +716,17 @@ export async function renderCrudPage<T extends CrudRecord>(
   dateInput.min = `${referenceMonth}-01`;
   dateInput.max = getLastDateOfMonth(referenceMonth);
 
+  openDrawerButton.addEventListener('click', () => {
+    if (drawer.open) return;
+
+    drawer.showModal();
+    queueMicrotask(() => dateInput.focus());
+  });
+
+  closeDrawerButton.addEventListener('click', () => {
+    drawer.close('cancel');
+  });
+
   const isCurrentPage = (): boolean =>
     pageVersions.get(container) === pageVersion && container.contains(page);
 
@@ -512,6 +739,8 @@ export async function renderCrudPage<T extends CrudRecord>(
     feedback.classList.toggle('crud-feedback--error', tone === 'error');
     feedback.classList.toggle('crud-feedback--success', tone === 'success');
   };
+
+  drawer.addEventListener('close', () => setFeedback(''));
 
   let listVersion = 0;
 
@@ -705,7 +934,10 @@ export async function renderCrudPage<T extends CrudRecord>(
         amountInput.value = '';
         await refreshList();
         setFeedback('Lançamento salvo com sucesso.', 'success');
-        descriptionInput.focus();
+
+        if (drawer.open) {
+          drawer.close('saved');
+        }
       } catch (error) {
         if (!isCurrentPage()) return;
 

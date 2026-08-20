@@ -1,5 +1,6 @@
 import { isAuthenticated, logout } from './core/auth';
 import { initDB } from './core/database';
+import { showConfirmDialog } from './components/confirm-dialog';
 import { renderCatalogPage } from './pages/catalog';
 import { renderDashboard } from './pages/dashboard';
 import { renderEntries } from './pages/entries';
@@ -132,7 +133,14 @@ function initializeRouter(): void {
     });
   }
 
-  logoutButton?.addEventListener('click', () => {
+  logoutButton?.addEventListener('click', async () => {
+    const confirmed = await showConfirmDialog(
+      'Sair do sistema',
+      'Tem certeza que deseja encerrar sua sessão?',
+    );
+
+    if (!confirmed) return;
+
     logout();
     window.location.hash = '#login';
   });
