@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#090909" />
+    <meta
+      name="description"
+      content="Controle financeiro local da Barbearia Distrito."
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Distrito Financeiro</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="app-navigation" aria-label="Navegação principal">
+        <a class="app-brand" href="#dashboard" aria-label="Barbearia Distrito — ir para o resumo">
+          <img
+            class="app-brand__logo"
+            src="/src/assets/barbearia-distrito-logo.jpg"
+            alt=""
+            width="150"
+            height="150"
+          />
+          <span class="app-brand__text">
+            <strong>Financeiro</strong>
+            <small>Barbearia Distrito</small>
+          </span>
+        </a>
+
+        <nav class="primary-navigation">
+          <a
+            class="navigation-link"
+            href="#dashboard"
+            data-route="dashboard"
+            aria-current="page"
+          >
+            <span class="navigation-link__icon" aria-hidden="true">⌂</span>
+            <span>Dashboard</span>
+          </a>
+          <a
+            class="navigation-link"
+            href="#entries"
+            data-route="entries"
+          >
+            <span class="navigation-link__icon" aria-hidden="true">☷</span>
+            <span>Lançamentos</span>
+          </a>
+          <a
+            class="navigation-link"
+            href="#catalog"
+            data-route="catalog"
+          >
+            <span class="navigation-link__icon" aria-hidden="true">◇</span>
+            <span>Catálogo</span>
+          </a>
+          <button
+            class="navigation-link navigation-link--logout"
+            type="button"
+            data-action="logout"
+          >
+            <span class="navigation-link__icon" aria-hidden="true">↪</span>
+            <span>Sair</span>
+          </button>
+        </nav>
+      </aside>
+
+      <div class="app-workspace">
+        <header class="app-header">
+          <img
+            class="app-header__logo"
+            src="/src/assets/barbearia-distrito-logo.jpg"
+            alt="Barbearia Distrito"
+            width="150"
+            height="150"
+          />
+          <div>
+            <p class="app-header__eyebrow">Barbearia Distrito</p>
+            <h1>Controle financeiro</h1>
+          </div>
+        </header>
+
+        <main id="app-content" class="app-content" tabindex="-1" aria-live="polite">
+          <h2>Página de Resumo</h2>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
