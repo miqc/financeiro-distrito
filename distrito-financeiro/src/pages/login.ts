@@ -116,7 +116,7 @@ const loginStyles = `
   .login-error {
     padding: 0.75rem;
     color: var(--color-danger);
-    background: #fff0ee;
+    background: var(--color-danger-soft);
     border: 1px solid #f0b4ad;
     border-radius: var(--radius-small);
     font-size: 0.875rem;

@@ -15,8 +15,18 @@
   --color-primary: #181818;
   --color-primary-strong: #000000;
   --color-primary-soft: #e1e1de;
-  --color-danger: #222222;
-  --color-warning: #555555;
+  --color-success: #27845a;
+  --color-success-strong: #16613f;
+  --color-success-soft: #eaf7f0;
+  --color-danger: #b42318;
+  --color-danger-strong: #8f1d15;
+  --color-danger-soft: #fff0ee;
+  --color-info: #2563a8;
+  --color-info-strong: #1e497d;
+  --color-info-soft: #edf5ff;
+  --color-warning: #9a6700;
+  --color-warning-strong: #755000;
+  --color-warning-soft: #fff7dc;
   --color-focus: #000000;
 
   --shadow-navigation: 0 -0.25rem 1.5rem rgb(0 0 0 / 12%);

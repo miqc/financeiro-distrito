@@ -142,8 +142,8 @@ const dashboardStyles = `
 
   .dashboard-feedback--error {
     color: var(--color-danger);
-    background: var(--color-surface-muted);
-    border-color: #8a8a8a;
+    background: var(--color-danger-soft);
+    border-color: rgb(180 35 24 / 24%);
   }
 
   .dashboard-summary-grid {
@@ -153,6 +153,7 @@ const dashboardStyles = `
   }
 
   .dashboard-card {
+    --dashboard-card-accent: var(--color-success);
     display: grid;
     min-height: 9rem;
     align-content: space-between;
@@ -162,10 +163,27 @@ const dashboardStyles = `
     background: var(--color-surface);
     border: 1px solid rgb(0 0 0 / 5%);
     border-radius: var(--radius-medium);
-    box-shadow: 0 0.25rem 1.25rem rgb(0 0 0 / 5%);
+    box-shadow:
+      inset 0 0.1875rem 0 var(--dashboard-card-accent),
+      0 0.25rem 1.25rem rgb(0 0 0 / 5%);
   }
 
-  .dashboard-card__label,
+  .dashboard-card--expense {
+    --dashboard-card-accent: var(--color-danger);
+  }
+
+  .dashboard-card--goal {
+    --dashboard-card-accent: var(--color-warning);
+  }
+
+  .dashboard-card--salary {
+    --dashboard-card-accent: var(--color-info);
+  }
+
+  .dashboard-card__label {
+    color: var(--dashboard-card-accent);
+  }
+
   .dashboard-card__detail {
     color: #737373;
   }
@@ -187,7 +205,67 @@ const dashboardStyles = `
     font-size: 0.7rem;
   }
 
+  .dashboard-daily-details {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: clamp(1.5rem, 5vw, 2.5rem);
+  }
+
+  .dashboard-daily-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 3.25rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border: 1px solid rgb(37 99 168 / 14%);
+    border-radius: var(--radius-medium);
+    cursor: pointer;
+    font-weight: 650;
+    list-style: none;
+    text-align: center;
+    user-select: none;
+    transition:
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+
+  .dashboard-daily-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .dashboard-daily-summary::after {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 0.125rem solid currentColor;
+    border-bottom: 0.125rem solid currentColor;
+    content: '';
+    transform: translateY(-0.125rem) rotate(45deg);
+    transition: transform 160ms ease;
+  }
+
+  .dashboard-daily-summary:hover {
+    background: #e2efff;
+    border-color: rgb(37 99 168 / 24%);
+  }
+
+  .dashboard-daily-details[open] .dashboard-daily-summary::after {
+    transform: translateY(0.125rem) rotate(225deg);
+  }
+
+  .dashboard-daily-details[open] .dashboard-daily {
+    margin-top: 0.75rem;
+    animation: dashboard-daily-reveal 180ms ease-out;
+  }
+
   .dashboard-daily {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -215,8 +293,12 @@ const dashboardStyles = `
   }
 
   .dashboard-daily__table-wrapper {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     overflow-x: auto;
     overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .dashboard-daily__table {
@@ -261,6 +343,18 @@ const dashboardStyles = `
     font-weight: 800;
   }
 
+  @keyframes dashboard-daily-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-0.5rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @media (min-width: 48rem) {
     .dashboard-filter-field[for="dashboard-month"] {
       width: min(100%, 13rem);
@@ -271,6 +365,16 @@ const dashboardStyles = `
     .dashboard-filters {
       grid-template-columns: minmax(0, 1fr);
       width: 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-daily-summary::after {
+      transition: none;
+    }
+
+    .dashboard-daily-details[open] .dashboard-daily {
+      animation: none;
     }
   }
 `;
@@ -480,36 +584,41 @@ export async function renderDashboard(
         </article>
       </section>
 
-      <section
-        class="dashboard-daily"
-        aria-labelledby="dashboard-daily-title"
-        hidden
-      >
-        <header class="dashboard-daily__header">
-          <h3 id="dashboard-daily-title">Faturamento diário</h3>
-          <p>Serviços e produtos somados por dia</p>
-        </header>
+      <details class="dashboard-daily-details" hidden>
+        <summary class="dashboard-daily-summary">
+          Ver faturamento dia a dia
+        </summary>
 
-        <div class="dashboard-daily__table-wrapper">
-          <table class="dashboard-daily__table">
-            <thead>
-              <tr>
-                <th scope="col">Dia</th>
-                <th scope="col">Faturamento</th>
-                <th scope="col">Retirada (10%)</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot>
-              <tr>
-                <td>Total do mês</td>
-                <td data-daily-total="revenue">R$ 0,00</td>
-                <td data-daily-total="withdrawal">R$ 0,00</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </section>
+        <section
+          class="dashboard-daily"
+          aria-labelledby="dashboard-daily-title"
+        >
+          <header class="dashboard-daily__header">
+            <h3 id="dashboard-daily-title">Faturamento diário</h3>
+            <p>Serviços e produtos somados por dia</p>
+          </header>
+
+          <div class="dashboard-daily__table-wrapper">
+            <table class="dashboard-daily__table">
+              <thead>
+                <tr>
+                  <th scope="col">Dia</th>
+                  <th scope="col">Faturamento</th>
+                  <th scope="col">Retirada (10%)</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot>
+                <tr>
+                  <td>Total do mês</td>
+                  <td data-daily-total="revenue">R$ 0,00</td>
+                  <td data-daily-total="withdrawal">R$ 0,00</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </section>
+      </details>
     </section>
   `;
 
@@ -535,7 +644,7 @@ export async function renderDashboard(
   );
   const dailySection = getRequiredElement<HTMLElement>(
     container,
-    '.dashboard-daily',
+    '.dashboard-daily-details',
   );
   const dailyTableBody = getRequiredElement<HTMLTableSectionElement>(
     container,

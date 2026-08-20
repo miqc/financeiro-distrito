@@ -126,12 +126,12 @@ const catalogStyles = `
 
   .catalog-feedback--error {
     color: var(--color-danger);
-    background: #fff0ee;
+    background: var(--color-danger-soft);
   }
 
   .catalog-feedback--success {
-    color: #0d654d;
-    background: #e1f5ed;
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
   }
 
   .catalog-records {
@@ -201,6 +201,16 @@ const catalogStyles = `
     font-weight: 750;
   }
 
+  .catalog-list-item__type[data-catalog-type="service"] {
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
+  }
+
+  .catalog-list-item__type[data-catalog-type="product"] {
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+  }
+
   .catalog-list-item__description {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -219,7 +229,7 @@ const catalogStyles = `
     padding: 0;
     place-items: center;
     color: var(--color-danger);
-    background: #fff0ee;
+    background: var(--color-danger-soft);
     font-size: 1.25rem;
   }
 
@@ -448,6 +458,7 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
 
           const type = document.createElement('span');
           type.className = 'catalog-list-item__type';
+          type.dataset.catalogType = item.type;
           type.textContent = TYPE_LABELS[item.type];
 
           const description = document.createElement('span');

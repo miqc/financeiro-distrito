@@ -14,7 +14,7 @@ export interface CrudRecord {
   amount: number;
 }
 
-export type CrudAccent = 'danger' | 'success' | 'primary';
+export type CrudAccent = 'danger' | 'success' | 'info' | 'primary';
 
 export interface CrudPageOptions<T extends CrudRecord> {
   title: string;
@@ -47,15 +47,21 @@ const crudStyles = `
   }
 
   .crud-page--danger {
-    --crud-accent: #3d3d3d;
-    --crud-accent-strong: #111111;
-    --crud-accent-soft: #e4e4e1;
+    --crud-accent: var(--color-danger);
+    --crud-accent-strong: var(--color-danger-strong);
+    --crud-accent-soft: var(--color-danger-soft);
   }
 
   .crud-page--success {
-    --crud-accent: #5e5e5e;
-    --crud-accent-strong: #111111;
-    --crud-accent-soft: #e4e4e1;
+    --crud-accent: var(--color-success);
+    --crud-accent-strong: var(--color-success-strong);
+    --crud-accent-soft: var(--color-success-soft);
+  }
+
+  .crud-page--info {
+    --crud-accent: var(--color-info);
+    --crud-accent-strong: var(--color-info-strong);
+    --crud-accent-soft: var(--color-info-soft);
   }
 
   .crud-page [hidden] {
@@ -269,12 +275,12 @@ const crudStyles = `
 
   .crud-feedback--error {
     color: var(--color-danger);
-    background: var(--color-surface-muted);
+    background: var(--color-danger-soft);
   }
 
   .crud-feedback--success {
-    color: var(--color-primary-strong);
-    background: var(--color-surface-muted);
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
   }
 
   .crud-records {
@@ -352,6 +358,7 @@ const crudStyles = `
   }
 
   .crud-list-item__amount {
+    color: var(--crud-accent-strong);
     font-variant-numeric: tabular-nums;
     font-weight: 750;
     text-align: right;
@@ -363,7 +370,7 @@ const crudStyles = `
     padding: 0;
     place-items: center;
     color: var(--color-danger);
-    background: var(--color-surface-muted);
+    background: var(--color-danger-soft);
     font-size: 1.25rem;
   }
 

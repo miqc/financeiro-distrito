@@ -56,14 +56,21 @@ const entriesStyles = `
 
   .entries-month-field {
     display: grid;
-    width: min(100%, 13rem);
     gap: 0.375rem;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     font-size: 0.875rem;
     font-weight: 700;
   }
 
   .entries-month-field input {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     background: var(--color-surface);
@@ -93,6 +100,8 @@ const entriesStyles = `
   }
 
   .entries-tab {
+    --entries-tab-accent: var(--color-primary-strong);
+    --entries-tab-soft: var(--color-surface);
     min-height: 2.75rem;
     padding: 0.625rem 1rem;
     color: var(--color-text-muted);
@@ -109,19 +118,42 @@ const entriesStyles = `
       box-shadow 160ms ease;
   }
 
+  .entries-tab[data-entry-tab="expenses"] {
+    --entries-tab-accent: var(--color-danger);
+    --entries-tab-soft: var(--color-danger-soft);
+  }
+
+  .entries-tab[data-entry-tab="services"] {
+    --entries-tab-accent: var(--color-success-strong);
+    --entries-tab-soft: var(--color-success-soft);
+  }
+
+  .entries-tab[data-entry-tab="products"] {
+    --entries-tab-accent: var(--color-info-strong);
+    --entries-tab-soft: var(--color-info-soft);
+  }
+
   .entries-tab:hover:not([aria-selected="true"]) {
-    color: var(--color-text);
-    background: rgb(255 255 255 / 55%);
+    color: var(--entries-tab-accent);
+    background: var(--entries-tab-soft);
   }
 
   .entries-tab[aria-selected="true"] {
-    color: var(--color-primary-strong);
-    background: var(--color-surface);
-    box-shadow: 0 0.125rem 0.5rem rgb(23 33 31 / 12%);
+    color: var(--entries-tab-accent);
+    background: var(--entries-tab-soft);
+    box-shadow:
+      inset 0 -0.125rem 0 var(--entries-tab-accent),
+      0 0.125rem 0.5rem rgb(23 33 31 / 10%);
   }
 
   .entries-tab-panel {
     min-width: 0;
+  }
+
+  @media (min-width: 48rem) {
+    .entries-month-field {
+      width: min(100%, 13rem);
+    }
   }
 
   @media (max-width: 30rem) {
@@ -162,27 +194,6 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
 
   container.innerHTML = `
     <section class="entries-page" aria-labelledby="entries-title">
-      <header class="entries-header">
-        <div class="entries-header__content">
-          <p class="entries-header__eyebrow">Controle mensal</p>
-          <h2 id="entries-title">Lançamentos</h2>
-          <p class="entries-header__description">
-            Cadastre despesas, serviços e produtos do período selecionado.
-          </p>
-        </div>
-
-        <label class="entries-month-field" for="entries-month">
-          Mês de referência
-          <input
-            id="entries-month"
-            name="entries-reference-month"
-            type="month"
-            min="2020-01"
-            max="2100-12"
-          />
-        </label>
-      </header>
-
       <div class="entries-tabs-wrapper">
         <nav class="entries-tabs" role="tablist" aria-label="Tipo de lançamento">
           <button
@@ -222,6 +233,27 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
           </button>
         </nav>
       </div>
+
+      <header class="entries-header">
+        <div class="entries-header__content">
+          <p class="entries-header__eyebrow">Controle mensal</p>
+          <h2 id="entries-title">Lançamentos</h2>
+          <p class="entries-header__description">
+            Cadastre despesas, serviços e produtos do período selecionado.
+          </p>
+        </div>
+
+        <label class="entries-month-field" for="entries-month">
+          Mês de referência
+          <input
+            id="entries-month"
+            name="entries-reference-month"
+            type="month"
+            min="2020-01"
+            max="2100-12"
+          />
+        </label>
+      </header>
 
       <div
         id="tab-content"
@@ -287,7 +319,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
         tabPanel,
         {
           title: 'Produtos',
-          accent: 'success',
+          accent: 'info',
           addRecord: addProduct,
           listRecordsByMonth: listProductsByMonth,
           deleteRecord: deleteProduct,
