@@ -45,28 +45,64 @@ const dashboardStyles = `
   }
 
   .dashboard-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: clamp(1rem, 3vw, 1.5rem);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 26rem);
+    align-items: stretch;
+    gap: clamp(1.25rem, 4vw, 2rem);
+    padding: clamp(1.25rem, 4vw, 2rem);
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--color-surface) 58%, var(--color-monthly-wash) 100%);
+    border: 1px solid var(--color-info-border);
     border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-surface);
+    box-shadow: var(--shadow-monthly);
+  }
+
+  .dashboard-header__intro {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .dashboard-header__icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 3.25rem;
+    height: 3.25rem;
+    place-items: center;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border: 1px solid var(--color-info-border);
+    border-radius: 1rem;
+  }
+
+  .dashboard-header__icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 
   .dashboard-header__content {
     display: grid;
-    gap: 0.25rem;
+    min-width: 0;
+    align-content: center;
+    gap: 0.375rem;
+  }
+
+  .dashboard-header__content h2 {
+    font-size: clamp(1.375rem, 4vw, 1.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
   }
 
   .dashboard-header__eyebrow {
-    color: var(--color-primary-strong);
+    width: fit-content;
+    padding: 0.25rem 0.625rem;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 750;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -77,17 +113,25 @@ const dashboardStyles = `
 
   .dashboard-filters {
     display: grid;
-    grid-template-columns: minmax(10rem, 1fr) minmax(9rem, 0.75fr);
-    gap: 0.75rem;
-    width: min(100%, 23rem);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+    width: 100%;
+    min-width: 0;
+    align-content: center;
+    gap: 0.875rem;
+    padding: 1rem;
+    background: var(--color-elevated-glass);
+    border: 1px solid var(--color-info-border);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-panel);
   }
 
   .dashboard-filter-field {
     display: grid;
+    min-width: 0;
     gap: 0.375rem;
-    color: var(--color-text);
-    font-size: 0.875rem;
-    font-weight: 700;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .dashboard-filter-field[for="dashboard-month"] {
@@ -95,9 +139,9 @@ const dashboardStyles = `
     gap: 0.375rem;
     width: 100%;
     max-width: 100%;
-    color: var(--color-text);
-    font-size: 0.875rem;
-    font-weight: 700;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .dashboard-filter-field input {
@@ -105,7 +149,7 @@ const dashboardStyles = `
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
   }
 
@@ -119,12 +163,17 @@ const dashboardStyles = `
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
   }
 
   .dashboard-filter-field input:hover:not(:disabled) {
-    border-color: var(--color-primary);
+    border-color: var(--color-info);
+  }
+
+  .dashboard-filter-field input:focus:not(:disabled) {
+    border-color: var(--color-info);
+    box-shadow: 0 0 0 0.1875rem var(--color-info-soft);
   }
 
   .dashboard-filter-field input:disabled {
@@ -140,10 +189,15 @@ const dashboardStyles = `
     border-radius: var(--radius-small);
   }
 
+  .dashboard-feedback:not([hidden]) {
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
+  }
+
   .dashboard-feedback--error {
     color: var(--color-danger);
     background: var(--color-danger-soft);
-    border-color: rgb(180 35 24 / 24%);
+    border-color: var(--color-danger-border);
   }
 
   .dashboard-summary-grid {
@@ -161,11 +215,28 @@ const dashboardStyles = `
     padding: clamp(1.25rem, 4vw, 1.75rem);
     overflow: hidden;
     background: var(--color-surface);
-    border: 1px solid rgb(0 0 0 / 5%);
+    border: 1px solid var(--color-soft-border);
     border-radius: var(--radius-medium);
     box-shadow:
       inset 0 0.1875rem 0 var(--dashboard-card-accent),
-      0 0.25rem 1.25rem rgb(0 0 0 / 5%);
+      var(--shadow-card);
+    animation: app-panel-enter var(--motion-duration-slow)
+      var(--motion-ease-emphasized) backwards;
+    transition:
+      transform var(--motion-duration-normal) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-normal) var(--motion-ease-standard);
+  }
+
+  .dashboard-card:nth-child(2) {
+    animation-delay: 45ms;
+  }
+
+  .dashboard-card:nth-child(3) {
+    animation-delay: 90ms;
+  }
+
+  .dashboard-card:nth-child(4) {
+    animation-delay: 135ms;
   }
 
   .dashboard-card--expense {
@@ -185,7 +256,7 @@ const dashboardStyles = `
   }
 
   .dashboard-card__detail {
-    color: #737373;
+    color: var(--color-subtle-label);
   }
 
   .dashboard-card__label {
@@ -222,7 +293,7 @@ const dashboardStyles = `
     padding: 0.75rem 1rem;
     color: var(--color-info-strong);
     background: var(--color-info-soft);
-    border: 1px solid rgb(37 99 168 / 14%);
+    border: 1px solid var(--color-info-border);
     border-radius: var(--radius-medium);
     cursor: pointer;
     font-weight: 650;
@@ -230,8 +301,9 @@ const dashboardStyles = `
     text-align: center;
     user-select: none;
     transition:
-      background-color 160ms ease,
-      border-color 160ms ease;
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
   .dashboard-daily-summary::-webkit-details-marker {
@@ -249,8 +321,12 @@ const dashboardStyles = `
   }
 
   .dashboard-daily-summary:hover {
-    background: #e2efff;
-    border-color: rgb(37 99 168 / 24%);
+    background: var(--color-info-hover);
+    border-color: var(--color-info-border);
+  }
+
+  .dashboard-daily-summary:active {
+    transform: scale(0.99);
   }
 
   .dashboard-daily-details[open] .dashboard-daily-summary::after {
@@ -355,9 +431,23 @@ const dashboardStyles = `
     }
   }
 
-  @media (min-width: 48rem) {
-    .dashboard-filter-field[for="dashboard-month"] {
-      width: min(100%, 13rem);
+  @media (max-width: 48rem) {
+    .dashboard-header {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-header__intro,
+    .dashboard-filters {
+      width: 100%;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .dashboard-card:hover {
+      transform: translateY(-0.125rem);
+      box-shadow:
+        inset 0 0.1875rem 0 var(--dashboard-card-accent),
+        var(--shadow-surface);
     }
   }
 
@@ -365,6 +455,12 @@ const dashboardStyles = `
     .dashboard-filters {
       grid-template-columns: minmax(0, 1fr);
       width: 100%;
+    }
+
+    .dashboard-header__icon {
+      width: 2.875rem;
+      height: 2.875rem;
+      border-radius: 0.875rem;
     }
   }
 
@@ -514,12 +610,28 @@ export async function renderDashboard(
   container.innerHTML = `
     <section class="dashboard-page" aria-labelledby="dashboard-title">
       <header class="dashboard-header">
-        <div class="dashboard-header__content">
-          <p class="dashboard-header__eyebrow">Visão mensal</p>
-          <h2 id="dashboard-title">Resumo financeiro</h2>
-          <p class="dashboard-header__description">
-            Serviços, produtos, despesas e resultado do período.
-          </p>
+        <div class="dashboard-header__intro">
+          <span class="dashboard-header__icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </span>
+
+          <div class="dashboard-header__content">
+            <p class="dashboard-header__eyebrow">Visão mensal</p>
+            <h2 id="dashboard-title">Resumo financeiro</h2>
+            <p class="dashboard-header__description">
+              Serviços, produtos, despesas e resultado do período.
+            </p>
+          </div>
         </div>
 
         <div class="dashboard-filters" aria-label="Configurações do mês">

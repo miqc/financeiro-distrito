@@ -3,8 +3,8 @@ let dialogSequence = 0;
 
 const confirmDialogStyles = `
   .confirm-dialog {
-    --confirm-dialog-danger: #b42318;
-    --confirm-dialog-danger-hover: #8f1d15;
+    --confirm-dialog-danger: var(--color-danger-action);
+    --confirm-dialog-danger-hover: var(--color-danger-action-hover);
     width: min(calc(100% - 2rem), 28rem);
     max-width: 28rem;
     margin: auto;
@@ -13,16 +13,22 @@ const confirmDialogStyles = `
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
-    box-shadow: 0 1.5rem 4rem rgb(23 33 31 / 28%);
+    box-shadow: var(--shadow-dialog);
   }
 
   .confirm-dialog::backdrop {
-    background: rgb(10 20 18 / 58%);
+    background: var(--color-overlay);
     backdrop-filter: blur(0.25rem);
   }
 
+  .confirm-dialog[open]::backdrop {
+    animation: app-backdrop-enter var(--motion-duration-normal)
+      var(--motion-ease-standard) both;
+  }
+
   .confirm-dialog[open] {
-    animation: confirm-dialog-enter 160ms ease-out;
+    animation: confirm-dialog-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized);
   }
 
   .confirm-dialog__content {
@@ -75,7 +81,7 @@ const confirmDialogStyles = `
   }
 
   .confirm-dialog__button--confirm {
-    color: #ffffff;
+    color: var(--color-on-accent);
     background: var(--confirm-dialog-danger);
     border: 1px solid var(--confirm-dialog-danger);
   }
@@ -123,6 +129,7 @@ function ensureConfirmDialogStyles(): void {
 export async function showConfirmDialog(
   title: string,
   message: string,
+  confirmLabel = 'Excluir',
 ): Promise<boolean> {
   ensureConfirmDialogStyles();
 
@@ -166,7 +173,7 @@ export async function showConfirmDialog(
     confirmButton.className =
       'confirm-dialog__button confirm-dialog__button--confirm';
     confirmButton.type = 'button';
-    confirmButton.textContent = 'Excluir';
+    confirmButton.textContent = confirmLabel;
 
     header.append(heading, description);
     actions.append(cancelButton, confirmButton);

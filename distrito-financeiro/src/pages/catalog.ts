@@ -28,8 +28,11 @@ const catalogStyles = `
     display: none !important;
   }
 
+  .catalog-drawer:not([open]) {
+    display: none !important;
+  }
+
   .catalog-header,
-  .catalog-form,
   .catalog-records {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -38,10 +41,18 @@ const catalogStyles = `
   }
 
   .catalog-header {
-    display: grid;
-    gap: 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
     padding: clamp(1rem, 3vw, 1.5rem);
     border-left: 0.35rem solid var(--color-primary);
+  }
+
+  .catalog-header__content {
+    display: grid;
+    gap: 0.25rem;
   }
 
   .catalog-header__eyebrow {
@@ -57,20 +68,116 @@ const catalogStyles = `
     font-size: 0.9375rem;
   }
 
+  .catalog-open-drawer,
+  .catalog-drawer__close {
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 750;
+  }
+
+  .catalog-open-drawer {
+    padding: 0.625rem 1rem;
+    color: var(--color-on-action);
+    background: var(--color-action);
+  }
+
+  .catalog-open-drawer:hover {
+    background: var(--color-action-hover);
+  }
+
+  .catalog-drawer {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    background: transparent;
+    border: none;
+  }
+
+  .catalog-drawer::backdrop {
+    background: var(--color-overlay);
+    backdrop-filter: blur(2px);
+  }
+
+  .catalog-drawer[open]::backdrop {
+    animation: app-backdrop-enter var(--motion-duration-normal)
+      var(--motion-ease-standard) both;
+  }
+
+  .catalog-drawer[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .catalog-drawer:focus {
+    outline: none;
+  }
+
+  .catalog-drawer__header {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .catalog-drawer__header h3 {
+    font-size: 1.125rem;
+  }
+
+  .catalog-drawer__close {
+    display: grid;
+    width: 2.75rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+    line-height: 1;
+  }
+
+  .catalog-drawer__close:hover {
+    color: var(--color-text);
+  }
+
   .catalog-form {
     display: grid;
     grid-template-columns: minmax(9rem, 0.75fr) minmax(14rem, 2fr) minmax(9rem, 0.75fr) auto;
     align-items: end;
+    width: min(calc(100% - 2rem), 58rem);
+    max-width: 58rem;
+    max-height: min(90vh, 46rem);
+    max-height: min(90dvh, 46rem);
     gap: 0.875rem;
     padding: clamp(1rem, 3vw, 1.5rem);
+    overflow: auto;
+    background: var(--color-surface);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-dialog);
+  }
+
+  .catalog-drawer[open] > .catalog-form {
+    animation: catalog-modal-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized);
   }
 
   .catalog-field {
     display: grid;
     min-width: 0;
-    gap: 0.375rem;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
     font-size: 0.8125rem;
-    font-weight: 700;
+    font-weight: 500;
   }
 
   .catalog-field input,
@@ -80,13 +187,28 @@ const catalogStyles = `
     padding: 0.625rem 0.75rem;
     color: var(--color-text);
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
+  }
+
+  .catalog-field select {
+    position: relative;
+    z-index: 1;
+    -webkit-appearance: menulist;
+    appearance: auto;
+    pointer-events: auto;
+    touch-action: manipulation;
   }
 
   .catalog-field input:hover,
   .catalog-field select:hover {
     border-color: var(--color-primary);
+  }
+
+  .catalog-field input:focus,
+  .catalog-field select:focus {
+    border-color: var(--color-primary-strong);
+    box-shadow: 0 0 0 0.1875rem var(--color-primary-soft);
   }
 
   .catalog-submit,
@@ -101,12 +223,12 @@ const catalogStyles = `
 
   .catalog-submit {
     padding: 0.625rem 1rem;
-    color: #ffffff;
-    background: var(--color-primary-strong);
+    color: var(--color-on-action);
+    background: var(--color-action);
   }
 
   .catalog-submit:hover:not(:disabled) {
-    background: var(--color-primary);
+    background: var(--color-action-hover);
   }
 
   .catalog-submit:disabled,
@@ -122,6 +244,11 @@ const catalogStyles = `
     background: var(--color-background);
     border-radius: var(--radius-small);
     font-size: 0.875rem;
+  }
+
+  .catalog-feedback:not([hidden]) {
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
   .catalog-feedback--error {
@@ -185,6 +312,8 @@ const catalogStyles = `
     min-height: 4rem;
     padding: 0.625rem clamp(1rem, 3vw, 1.5rem);
     border-bottom: 1px solid var(--color-border);
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
   .catalog-list-item:last-child {
@@ -234,14 +363,36 @@ const catalogStyles = `
   }
 
   .catalog-delete:hover:not(:disabled) {
-    color: #ffffff;
-    background: var(--color-danger);
+    color: var(--color-on-accent);
+    background: var(--color-danger-action);
   }
 
   .catalog-empty {
     padding: 2rem 1rem;
     color: var(--color-text-muted);
     text-align: center;
+  }
+
+  @keyframes catalog-modal-enter {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes catalog-drawer-enter {
+    from {
+      transform: translateY(100%);
+    }
+
+    to {
+      transform: translateY(0);
+    }
   }
 
   @media (max-width: 64rem) {
@@ -254,9 +405,39 @@ const catalogStyles = `
     }
   }
 
+  @media (hover: hover) and (pointer: fine) {
+    .catalog-open-drawer:hover,
+    .catalog-submit:hover:not(:disabled) {
+      transform: translateY(-0.0625rem);
+    }
+  }
+
   @media (max-width: 40rem) {
+    .catalog-open-drawer {
+      width: 100%;
+    }
+
+    .catalog-drawer[open] {
+      align-items: flex-end;
+    }
+
+    .catalog-drawer .catalog-form {
+      width: 100%;
+      max-width: 100%;
+      max-height: calc(100dvh - 0.75rem);
+      margin: auto 0 0;
+      border-radius: 1rem 1rem 0 0;
+    }
+
+    .catalog-drawer[open] > .catalog-form {
+      animation: catalog-drawer-enter var(--motion-duration-normal)
+        var(--motion-ease-emphasized);
+    }
+
     .catalog-form {
       grid-template-columns: minmax(0, 1fr);
+      gap: 1.125rem;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
     }
 
     .catalog-list-header {
@@ -282,6 +463,12 @@ const catalogStyles = `
     .catalog-delete {
       grid-column: 2;
       grid-row: 1 / span 3;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .catalog-drawer[open] > .catalog-form {
+      animation: none;
     }
   }
 `;
@@ -317,54 +504,78 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
   container.innerHTML = `
     <section class="catalog-page" aria-labelledby="catalog-title">
       <header class="catalog-header">
-        <p class="catalog-header__eyebrow">Itens predefinidos</p>
-        <h2 id="catalog-title">Catálogo</h2>
-        <p class="catalog-header__description">
-          Cadastre serviços e produtos para agilizar novos lançamentos.
-        </p>
+        <div class="catalog-header__content">
+          <p class="catalog-header__eyebrow">Itens predefinidos</p>
+          <h2 id="catalog-title">Catálogo</h2>
+          <p class="catalog-header__description">
+            Cadastre serviços e produtos para agilizar novos lançamentos.
+          </p>
+        </div>
+
+        <button class="catalog-open-drawer" type="button">
+          Adicionar item
+        </button>
       </header>
 
-      <form class="catalog-form">
-        <label class="catalog-field" for="catalog-type">
-          Tipo
-          <select id="catalog-type" name="type" required>
-            <option value="service">Serviço</option>
-            <option value="product">Produto</option>
-          </select>
-        </label>
+      <dialog
+        class="catalog-drawer"
+        aria-labelledby="catalog-drawer-title"
+        tabindex="-1"
+      >
+        <form class="catalog-form">
+          <header class="catalog-drawer__header">
+            <h3 id="catalog-drawer-title">Novo item do catálogo</h3>
+            <button
+              class="catalog-drawer__close"
+              type="button"
+              aria-label="Cancelar e fechar formulário"
+              title="Cancelar"
+            >
+              ×
+            </button>
+          </header>
 
-        <label class="catalog-field" for="catalog-description">
-          Descrição
-          <input
-            id="catalog-description"
-            name="description"
-            type="text"
-            maxlength="160"
-            autocomplete="off"
-            required
-          />
-        </label>
+          <label class="catalog-field" for="catalog-type">
+            Tipo
+            <select id="catalog-type" name="type" required>
+              <option value="service">Serviço</option>
+              <option value="product">Produto</option>
+            </select>
+          </label>
 
-        <label class="catalog-field" for="catalog-price">
-          Preço padrão
-          <input
-            id="catalog-price"
-            name="price"
-            type="number"
-            min="0"
-            step="0.01"
-            inputmode="decimal"
-            placeholder="0,00"
-            required
-          />
-        </label>
+          <label class="catalog-field" for="catalog-description">
+            Descrição
+            <input
+              id="catalog-description"
+              name="description"
+              type="text"
+              maxlength="160"
+              autocomplete="off"
+              required
+            />
+          </label>
 
-        <button class="catalog-submit" type="submit">
-          Adicionar ao Catálogo
-        </button>
+          <label class="catalog-field" for="catalog-price">
+            Preço padrão
+            <input
+              id="catalog-price"
+              name="price"
+              type="number"
+              min="0"
+              step="0.01"
+              inputmode="decimal"
+              placeholder="0,00"
+              required
+            />
+          </label>
 
-        <p class="catalog-feedback" role="status" aria-live="polite" hidden></p>
-      </form>
+          <button class="catalog-submit" type="submit">
+            Salvar item
+          </button>
+
+          <p class="catalog-feedback" role="status" aria-live="polite" hidden></p>
+        </form>
+      </dialog>
 
       <section class="catalog-records" aria-labelledby="catalog-list-title">
         <header class="catalog-records__header">
@@ -385,6 +596,18 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
   `;
 
   const page = getRequiredElement<HTMLElement>(container, '.catalog-page');
+  const drawer = getRequiredElement<HTMLDialogElement>(
+    container,
+    '.catalog-drawer',
+  );
+  const openDrawerButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.catalog-open-drawer',
+  );
+  const closeDrawerButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.catalog-drawer__close',
+  );
   const form = getRequiredElement<HTMLFormElement>(container, '.catalog-form');
   const typeInput = getRequiredElement<HTMLSelectElement>(
     container,
@@ -415,6 +638,42 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
     '.catalog-list',
   );
 
+  let lastDrawerInteractionWasPointer = false;
+
+  openDrawerButton.addEventListener('pointerdown', () => {
+    lastDrawerInteractionWasPointer = true;
+  });
+
+  openDrawerButton.addEventListener('keydown', () => {
+    lastDrawerInteractionWasPointer = false;
+  });
+
+  drawer.addEventListener('pointerdown', () => {
+    lastDrawerInteractionWasPointer = true;
+  });
+
+  drawer.addEventListener('keydown', () => {
+    lastDrawerInteractionWasPointer = false;
+  });
+
+  openDrawerButton.addEventListener('click', (event) => {
+    if (drawer.open) return;
+
+    if (event.detail > 0) {
+      lastDrawerInteractionWasPointer = true;
+    }
+
+    drawer.showModal();
+
+    if (lastDrawerInteractionWasPointer) {
+      drawer.focus({ preventScroll: true });
+    }
+  });
+
+  closeDrawerButton.addEventListener('click', () => {
+    drawer.close('cancel');
+  });
+
   const isCurrentPage = (): boolean =>
     pageVersions.get(container) === pageVersion && container.contains(page);
 
@@ -427,6 +686,18 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
     feedback.classList.toggle('catalog-feedback--error', tone === 'error');
     feedback.classList.toggle('catalog-feedback--success', tone === 'success');
   };
+
+  drawer.addEventListener('close', () => {
+    setFeedback('');
+
+    if (lastDrawerInteractionWasPointer) {
+      requestAnimationFrame(() => {
+        if (openDrawerButton.isConnected) {
+          openDrawerButton.blur();
+        }
+      });
+    }
+  });
 
   let listVersion = 0;
 
@@ -555,7 +826,10 @@ export async function renderCatalogPage(container: HTMLElement): Promise<void> {
         priceInput.value = '';
         await refreshList();
         setFeedback('Item adicionado ao catálogo.', 'success');
-        descriptionInput.focus();
+
+        if (drawer.open) {
+          drawer.close('saved');
+        }
       } catch (error) {
         if (!isCurrentPage()) return;
 

@@ -42,26 +42,36 @@ const crudStyles = `
     --crud-accent: var(--color-primary);
     --crud-accent-strong: var(--color-primary-strong);
     --crud-accent-soft: var(--color-primary-soft);
+    --crud-action: var(--color-action);
+    --crud-action-hover: var(--color-action-hover);
     display: grid;
     gap: clamp(1rem, 3vw, 1.5rem);
+    animation: app-panel-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
   .crud-page--danger {
     --crud-accent: var(--color-danger);
     --crud-accent-strong: var(--color-danger-strong);
     --crud-accent-soft: var(--color-danger-soft);
+    --crud-action: var(--color-danger-action);
+    --crud-action-hover: var(--color-danger-action-hover);
   }
 
   .crud-page--success {
     --crud-accent: var(--color-success);
     --crud-accent-strong: var(--color-success-strong);
     --crud-accent-soft: var(--color-success-soft);
+    --crud-action: var(--color-success-action);
+    --crud-action-hover: var(--color-success-action-hover);
   }
 
   .crud-page--info {
     --crud-accent: var(--color-info);
     --crud-accent-strong: var(--color-info-strong);
     --crud-accent-soft: var(--color-info-soft);
+    --crud-action: var(--color-info-action);
+    --crud-action-hover: var(--color-info-action-hover);
   }
 
   .crud-page [hidden] {
@@ -123,12 +133,12 @@ const crudStyles = `
 
   .crud-open-drawer {
     padding: 0.625rem 1rem;
-    color: #ffffff;
-    background: var(--crud-accent-strong);
+    color: var(--color-on-accent);
+    background: var(--crud-action);
   }
 
   .crud-open-drawer:hover {
-    background: var(--crud-accent);
+    background: var(--crud-action-hover);
   }
 
   .crud-drawer {
@@ -146,14 +156,23 @@ const crudStyles = `
   }
 
   .crud-drawer::backdrop {
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--color-overlay);
     backdrop-filter: blur(2px);
+  }
+
+  .crud-drawer[open]::backdrop {
+    animation: app-backdrop-enter var(--motion-duration-normal)
+      var(--motion-ease-standard) both;
   }
 
   .crud-drawer[open] {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .crud-drawer:focus {
+    outline: none;
   }
 
   .crud-drawer__header {
@@ -189,19 +208,22 @@ const crudStyles = `
     grid-template-columns: minmax(9rem, 0.85fr) minmax(14rem, 2fr) minmax(9rem, 0.85fr) auto;
     align-items: end;
     width: min(calc(100% - 2rem), 62rem);
+    min-width: 0;
     max-width: 62rem;
     max-height: min(90vh, 48rem);
     max-height: min(90dvh, 48rem);
     gap: 0.875rem;
     padding: clamp(1rem, 3vw, 1.5rem);
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     background: var(--color-surface);
     border-radius: var(--radius-medium);
-    box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
+    box-shadow: var(--shadow-dialog);
   }
 
   .crud-drawer[open] > .crud-form {
-    animation: crud-modal-enter 160ms ease-out;
+    animation: crud-modal-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized);
   }
 
   .crud-form--with-catalog {
@@ -210,7 +232,9 @@ const crudStyles = `
 
   .crud-field {
     display: grid;
+    width: 100%;
     min-width: 0;
+    max-width: 100%;
     gap: 0.5rem;
     color: var(--color-text-muted);
     font-size: 0.8125rem;
@@ -220,12 +244,40 @@ const crudStyles = `
   .crud-field input,
   .crud-field select {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     color: var(--color-text);
     background: var(--color-surface);
-    border: 1px solid #ddddda;
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
+  }
+
+  .crud-field input[type="date"] {
+    display: block;
+    width: 100%;
+    inline-size: 100%;
+    min-width: 0;
+    min-inline-size: 0;
+    max-width: 100%;
+    max-inline-size: 100%;
+    overflow: hidden;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .crud-field input[type="date"]::-webkit-date-and-time-value {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .crud-field input[type="date"]::-webkit-datetime-edit {
+    min-width: 0;
+    overflow: hidden;
   }
 
   .crud-field input:hover,
@@ -236,6 +288,7 @@ const crudStyles = `
   .crud-field input:focus,
   .crud-field select:focus {
     border-color: var(--crud-accent-strong);
+    box-shadow: 0 0 0 0.1875rem var(--crud-accent-soft);
   }
 
   .crud-submit-button,
@@ -249,12 +302,12 @@ const crudStyles = `
 
   .crud-submit-button {
     padding: 0.625rem 1rem;
-    color: #ffffff;
-    background: var(--crud-accent-strong);
+    color: var(--color-on-accent);
+    background: var(--crud-action);
   }
 
   .crud-submit-button:hover:not(:disabled) {
-    background: var(--crud-accent);
+    background: var(--crud-action-hover);
   }
 
   .crud-submit-button:disabled,
@@ -271,6 +324,11 @@ const crudStyles = `
     background: var(--color-background);
     border-radius: var(--radius-small);
     font-size: 0.875rem;
+  }
+
+  .crud-feedback:not([hidden]) {
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
   .crud-feedback--error {
@@ -335,6 +393,8 @@ const crudStyles = `
     min-height: 4rem;
     padding: 0.625rem clamp(1rem, 3vw, 1.5rem);
     border-bottom: 1px solid var(--color-border);
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
   .crud-list-item:last-child {
@@ -375,7 +435,7 @@ const crudStyles = `
   }
 
   .crud-delete-button:hover:not(:disabled) {
-    color: #ffffff;
+    color: var(--color-on-accent);
     background: var(--color-danger);
   }
 
@@ -417,6 +477,13 @@ const crudStyles = `
     }
   }
 
+  @media (hover: hover) and (pointer: fine) {
+    .crud-open-drawer:hover,
+    .crud-submit-button:hover:not(:disabled) {
+      transform: translateY(-0.0625rem);
+    }
+  }
+
   @media (max-width: 40rem) {
     .crud-page__header-actions,
     .crud-open-drawer {
@@ -447,13 +514,20 @@ const crudStyles = `
     }
 
     .crud-drawer[open] > .crud-form {
-      animation: crud-drawer-enter 200ms ease-out;
+      animation: crud-drawer-enter var(--motion-duration-normal)
+        var(--motion-ease-emphasized);
     }
 
     .crud-form {
       grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
       gap: 1.125rem;
       padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    }
+
+    .crud-form > * {
+      min-width: 0;
+      max-width: 100%;
     }
 
     .crud-list-header {
@@ -466,7 +540,7 @@ const crudStyles = `
       gap: 0.25rem 0.75rem;
       min-height: 4.75rem;
       padding-block: 1rem;
-      border-bottom-color: rgb(0 0 0 / 7%);
+      border-bottom-color: var(--color-row-divider);
     }
 
     .crud-list-item__description {
@@ -480,7 +554,7 @@ const crudStyles = `
       grid-column: 1;
       grid-row: 2;
       align-self: start;
-      color: #737373;
+      color: var(--color-subtle-label);
       font-size: 0.75rem;
     }
 
@@ -509,8 +583,8 @@ const crudStyles = `
     }
 
     .crud-delete-button:active:not(:disabled) {
-      color: #ffffff;
-      background: var(--color-danger);
+      color: var(--color-on-accent);
+      background: var(--color-danger-action);
       opacity: 1;
     }
   }
@@ -603,7 +677,11 @@ export async function renderCrudPage<T extends CrudRecord>(
         </div>
       </header>
 
-      <dialog class="crud-drawer" aria-labelledby="crud-drawer-title">
+      <dialog
+        class="crud-drawer"
+        aria-labelledby="crud-drawer-title"
+        tabindex="-1"
+      >
         <form class="crud-form">
           <header class="crud-drawer__header">
             <h3 id="crud-drawer-title">Novo lançamento</h3>
@@ -723,11 +801,36 @@ export async function renderCrudPage<T extends CrudRecord>(
   dateInput.min = `${referenceMonth}-01`;
   dateInput.max = getLastDateOfMonth(referenceMonth);
 
-  openDrawerButton.addEventListener('click', () => {
+  let lastDrawerInteractionWasPointer = false;
+
+  openDrawerButton.addEventListener('pointerdown', () => {
+    lastDrawerInteractionWasPointer = true;
+  });
+
+  openDrawerButton.addEventListener('keydown', () => {
+    lastDrawerInteractionWasPointer = false;
+  });
+
+  drawer.addEventListener('pointerdown', () => {
+    lastDrawerInteractionWasPointer = true;
+  });
+
+  drawer.addEventListener('keydown', () => {
+    lastDrawerInteractionWasPointer = false;
+  });
+
+  openDrawerButton.addEventListener('click', (event) => {
     if (drawer.open) return;
 
+    if (event.detail > 0) {
+      lastDrawerInteractionWasPointer = true;
+    }
+
     drawer.showModal();
-    queueMicrotask(() => dateInput.focus());
+
+    if (lastDrawerInteractionWasPointer) {
+      drawer.focus({ preventScroll: true });
+    }
   });
 
   closeDrawerButton.addEventListener('click', () => {
@@ -747,7 +850,17 @@ export async function renderCrudPage<T extends CrudRecord>(
     feedback.classList.toggle('crud-feedback--success', tone === 'success');
   };
 
-  drawer.addEventListener('close', () => setFeedback(''));
+  drawer.addEventListener('close', () => {
+    setFeedback('');
+
+    if (lastDrawerInteractionWasPointer) {
+      requestAnimationFrame(() => {
+        if (openDrawerButton.isConnected) {
+          openDrawerButton.blur();
+        }
+      });
+    }
+  });
 
   let listVersion = 0;
 

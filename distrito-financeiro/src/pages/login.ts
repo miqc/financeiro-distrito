@@ -40,17 +40,17 @@ const loginStyles = `
     text-align: center;
   }
 
-  .login-page__mark {
-    display: grid;
-    width: 3.5rem;
-    height: 3.5rem;
+  .login-page__logo {
+    width: 5rem;
+    height: 5rem;
     margin-bottom: 0.25rem;
-    place-items: center;
-    color: #ffffff;
-    background: var(--color-primary);
-    border-radius: 1rem;
-    font-size: 1.5rem;
-    font-weight: 850;
+    object-fit: cover;
+    background: #090909;
+    border: 1px solid var(--color-border);
+    border-radius: 0.875rem;
+    box-shadow: var(--shadow-surface);
+    animation: app-pop-enter var(--motion-duration-slow)
+      var(--motion-ease-emphasized) 60ms backwards;
   }
 
   .login-page__header h1 {
@@ -58,12 +58,8 @@ const loginStyles = `
     line-height: 1.2;
   }
 
-  .login-page__header p,
-  .login-page__hint {
-    color: var(--color-text-muted);
-  }
-
   .login-page__header p {
+    color: var(--color-text-muted);
     font-size: 0.9375rem;
   }
 
@@ -92,12 +88,17 @@ const loginStyles = `
     border-color: var(--color-primary);
   }
 
+  .login-field input:focus {
+    border-color: var(--color-primary-strong);
+    box-shadow: 0 0 0 0.1875rem var(--color-primary-soft);
+  }
+
   .login-submit {
     min-height: 3rem;
     margin-top: 0.25rem;
     padding: 0.75rem 1rem;
-    color: #ffffff;
-    background: var(--color-primary-strong);
+    color: var(--color-on-action);
+    background: var(--color-action);
     border: 0;
     border-radius: var(--radius-small);
     cursor: pointer;
@@ -105,7 +106,7 @@ const loginStyles = `
   }
 
   .login-submit:hover:not(:disabled) {
-    background: var(--color-primary);
+    background: var(--color-action-hover);
   }
 
   .login-submit:disabled {
@@ -117,22 +118,20 @@ const loginStyles = `
     padding: 0.75rem;
     color: var(--color-danger);
     background: var(--color-danger-soft);
-    border: 1px solid #f0b4ad;
+    border: 1px solid var(--color-danger-border);
     border-radius: var(--radius-small);
     font-size: 0.875rem;
   }
 
-  .login-page__hint {
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-    font-size: 0.75rem;
-    text-align: center;
+  .login-error:not([hidden]) {
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
   }
 
-  .login-page__hint code {
-    color: var(--color-text);
-    font-family: inherit;
-    font-weight: 750;
+  @media (hover: hover) and (pointer: fine) {
+    .login-submit:hover:not(:disabled) {
+      transform: translateY(-0.0625rem);
+    }
   }
 `;
 
@@ -164,7 +163,13 @@ export function renderLogin(container: HTMLElement): void {
   container.innerHTML = `
     <section class="login-page" aria-labelledby="login-title">
       <header class="login-page__header">
-        <span class="login-page__mark" aria-hidden="true">D</span>
+        <img
+          class="login-page__logo"
+          src="/src/assets/barbearia-distrito-logo.jpg"
+          alt="Barbearia Distrito"
+          width="150"
+          height="150"
+        />
         <h1 id="login-title">Acessar o Distrito</h1>
         <p>Entre para acessar o controle financeiro.</p>
       </header>
@@ -197,10 +202,6 @@ export function renderLogin(container: HTMLElement): void {
 
         <button class="login-submit" type="submit">Entrar</button>
       </form>
-
-      <p class="login-page__hint">
-        Desenvolvimento: <code>admin@distrito.com</code> / <code>admin</code>
-      </p>
     </section>
   `;
 
@@ -222,26 +223,37 @@ export function renderLogin(container: HTMLElement): void {
     '.login-submit',
   );
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    if (!form.reportValidity()) return;
+    if (!form.reportValidity() || submitButton.disabled) return;
 
     submitButton.disabled = true;
     errorMessage.hidden = true;
 
-    const authenticated = login(emailInput.value, passwordInput.value);
+    try {
+      const authenticated = await login(
+        emailInput.value,
+        passwordInput.value,
+      );
 
-    if (authenticated) {
-      window.location.hash = '#dashboard';
-      return;
+      if (authenticated) {
+        window.location.hash = '#dashboard';
+        return;
+      }
+
+      errorMessage.textContent = 'E-mail ou senha inválidos.';
+      errorMessage.hidden = false;
+      passwordInput.select();
+      passwordInput.focus();
+    } catch (error) {
+      console.error('Não foi possível validar os dados de acesso.', error);
+      errorMessage.textContent =
+        'Não foi possível entrar agora. Tente novamente.';
+      errorMessage.hidden = false;
+    } finally {
+      if (submitButton.isConnected) submitButton.disabled = false;
     }
-
-    errorMessage.textContent = 'E-mail ou senha inválidos.';
-    errorMessage.hidden = false;
-    submitButton.disabled = false;
-    passwordInput.select();
-    passwordInput.focus();
   });
 
   queueMicrotask(() => emailInput.focus());

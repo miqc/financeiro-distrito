@@ -1,11 +1,15 @@
 import { isAuthenticated, logout } from './core/auth';
 import { initDB } from './core/database';
+import { initializeTheme } from './core/theme';
 import { showConfirmDialog } from './components/confirm-dialog';
 import { renderCatalogPage } from './pages/catalog';
 import { renderDashboard } from './pages/dashboard';
 import { renderEntries } from './pages/entries';
 import { renderLogin } from './pages/login';
+import { renderSettingsPage } from './pages/settings';
 import './styles/layout.css';
+
+initializeTheme();
 
 const ROUTES = {
   login: {
@@ -23,6 +27,10 @@ const ROUTES = {
   catalog: {
     navigationLabel: 'Catálogo',
     pageTitle: 'Catálogo',
+  },
+  settings: {
+    navigationLabel: 'Configurações',
+    pageTitle: 'Configurações',
   },
 } as const;
 
@@ -92,6 +100,8 @@ function renderRoute(requestedRoute: RouteName, moveFocus = false): void {
     void renderEntries(appContent);
   } else if (route === 'catalog') {
     void renderCatalogPage(appContent);
+  } else if (route === 'settings') {
+    renderSettingsPage(appContent);
   }
 
   for (const link of navigationLinks) {
@@ -137,6 +147,7 @@ function initializeRouter(): void {
     const confirmed = await showConfirmDialog(
       'Sair do sistema',
       'Tem certeza que deseja encerrar sua sessão?',
+      'Sair',
     );
 
     if (!confirmed) return;

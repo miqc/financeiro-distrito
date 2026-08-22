@@ -6,7 +6,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"
     />
-    <meta name="theme-color" content="#090909" />
+    <meta name="theme-color" content="#f2f2f0" />
+    <script>
+      try {
+        if (localStorage.getItem('distrito_theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.style.colorScheme = 'dark';
+          document
+            .querySelector('meta[name="theme-color"]')
+            ?.setAttribute('content', '#0f1113');
+        }
+      } catch {
+        // O tema claro permanece como alternativa segura.
+      }
+    </script>
     <meta
       name="description"
       content="Controle financeiro local da Barbearia Distrito."
@@ -110,6 +123,37 @@
               <circle cx="7.5" cy="8.5" r="1.25" />
             </svg>
             <span>Catálogo</span>
+          </a>
+          <a
+            class="navigation-link"
+            href="#settings"
+            data-route="settings"
+            aria-label="Configurações"
+          >
+            <svg
+              class="navigation-link__icon"
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 21v-7" />
+              <path d="M4 10V3" />
+              <path d="M12 21v-9" />
+              <path d="M12 8V3" />
+              <path d="M20 21v-5" />
+              <path d="M20 12V3" />
+              <path d="M1 14h6" />
+              <path d="M9 8h6" />
+              <path d="M17 16h6" />
+            </svg>
+            <span>Ajustes</span>
           </a>
           <button
             class="navigation-link navigation-link--logout"

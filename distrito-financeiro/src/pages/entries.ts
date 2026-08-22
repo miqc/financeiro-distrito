@@ -24,28 +24,64 @@ const entriesStyles = `
   }
 
   .entries-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: clamp(1rem, 3vw, 1.5rem);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 16rem);
+    align-items: stretch;
+    gap: clamp(1.25rem, 4vw, 2rem);
+    padding: clamp(1.25rem, 4vw, 2rem);
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--color-surface) 58%, var(--color-monthly-wash) 100%);
+    border: 1px solid var(--color-info-border);
     border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-surface);
+    box-shadow: var(--shadow-monthly);
+  }
+
+  .entries-header__intro {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .entries-header__icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 3.25rem;
+    height: 3.25rem;
+    place-items: center;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border: 1px solid var(--color-info-border);
+    border-radius: 1rem;
+  }
+
+  .entries-header__icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 
   .entries-header__content {
     display: grid;
-    gap: 0.25rem;
+    min-width: 0;
+    align-content: center;
+    gap: 0.375rem;
+  }
+
+  .entries-header__content h2 {
+    font-size: clamp(1.375rem, 4vw, 1.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
   }
 
   .entries-header__eyebrow {
-    color: var(--color-primary-strong);
+    width: fit-content;
+    padding: 0.25rem 0.625rem;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 750;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -56,12 +92,19 @@ const entriesStyles = `
 
   .entries-month-field {
     display: grid;
-    gap: 0.375rem;
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    font-size: 0.875rem;
-    font-weight: 700;
+    align-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--color-info-strong);
+    background: var(--color-elevated-glass);
+    border: 1px solid var(--color-info-border);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-panel);
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 
   .entries-month-field input {
@@ -74,12 +117,17 @@ const entriesStyles = `
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
   }
 
   .entries-month-field input:hover {
-    border-color: var(--color-primary);
+    border-color: var(--color-info);
+  }
+
+  .entries-month-field input:focus {
+    border-color: var(--color-info);
+    box-shadow: 0 0 0 0.1875rem var(--color-info-soft);
   }
 
   .entries-tabs-wrapper {
@@ -113,9 +161,10 @@ const entriesStyles = `
     font-size: 0.875rem;
     font-weight: 750;
     transition:
-      color 160ms ease,
-      background-color 160ms ease,
-      box-shadow 160ms ease;
+      transform var(--motion-duration-fast) var(--motion-ease-standard),
+      color var(--motion-duration-fast) var(--motion-ease-standard),
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
   .entries-tab[data-entry-tab="expenses"] {
@@ -143,16 +192,25 @@ const entriesStyles = `
     background: var(--entries-tab-soft);
     box-shadow:
       inset 0 -0.125rem 0 var(--entries-tab-accent),
-      0 0.125rem 0.5rem rgb(23 33 31 / 10%);
+      var(--shadow-active-control);
+  }
+
+  .entries-tab:active {
+    transform: scale(0.97);
   }
 
   .entries-tab-panel {
     min-width: 0;
   }
 
-  @media (min-width: 48rem) {
+  @media (max-width: 48rem) {
+    .entries-header {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .entries-header__intro,
     .entries-month-field {
-      width: min(100%, 13rem);
+      width: 100%;
     }
   }
 
@@ -161,8 +219,32 @@ const entriesStyles = `
       width: 100%;
     }
 
-    .entries-tabs {
+    .entries-tabs-wrapper {
       width: 100%;
+      min-width: 0;
+      overflow: visible;
+    }
+
+    .entries-tabs {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .entries-tab {
+      min-width: 0;
+      padding-inline: 0.5rem;
+      overflow: hidden;
+      font-size: 0.8125rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .entries-header__icon {
+      width: 2.875rem;
+      height: 2.875rem;
+      border-radius: 0.875rem;
     }
   }
 `;
@@ -235,12 +317,28 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
       </div>
 
       <header class="entries-header">
-        <div class="entries-header__content">
-          <p class="entries-header__eyebrow">Controle mensal</p>
-          <h2 id="entries-title">Lançamentos</h2>
-          <p class="entries-header__description">
-            Cadastre despesas, serviços e produtos do período selecionado.
-          </p>
+        <div class="entries-header__intro">
+          <span class="entries-header__icon" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+          </span>
+
+          <div class="entries-header__content">
+            <p class="entries-header__eyebrow">Controle mensal</p>
+            <h2 id="entries-title">Lançamentos</h2>
+            <p class="entries-header__description">
+              Cadastre despesas, serviços e produtos do período selecionado.
+            </p>
+          </div>
         </div>
 
         <label class="entries-month-field" for="entries-month">

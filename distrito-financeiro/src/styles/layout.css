@@ -18,23 +18,112 @@
   --color-success: #27845a;
   --color-success-strong: #16613f;
   --color-success-soft: #eaf7f0;
+  --color-success-action: #16613f;
+  --color-success-action-hover: #104c31;
   --color-danger: #b42318;
   --color-danger-strong: #8f1d15;
   --color-danger-soft: #fff0ee;
+  --color-danger-action: #b42318;
+  --color-danger-action-hover: #8f1d15;
   --color-info: #2563a8;
   --color-info-strong: #1e497d;
   --color-info-soft: #edf5ff;
+  --color-info-action: #1e497d;
+  --color-info-action-hover: #17395f;
   --color-warning: #9a6700;
   --color-warning-strong: #755000;
   --color-warning-soft: #fff7dc;
   --color-focus: #000000;
+  --color-action: #181818;
+  --color-action-hover: #000000;
+  --color-on-action: #ffffff;
+  --color-app-header: rgb(255 255 255 / 94%);
+  --color-monthly-wash: #f5f9ff;
+  --color-elevated-glass: rgb(255 255 255 / 78%);
+  --color-input-border: rgb(0 0 0 / 14%);
+  --color-soft-border: rgb(0 0 0 / 5%);
+  --color-subtle-label: #737373;
+  --color-info-hover: #e2efff;
+  --color-info-border: rgb(37 99 168 / 16%);
+  --color-danger-border: rgb(180 35 24 / 24%);
+  --color-row-divider: rgb(0 0 0 / 7%);
+  --color-overlay: rgb(0 0 0 / 58%);
+  --color-on-accent: #ffffff;
+  --color-switch-thumb: #ffffff;
 
   --shadow-navigation: 0 -0.25rem 1.5rem rgb(0 0 0 / 12%);
   --shadow-surface: 0 0.5rem 1.5rem rgb(0 0 0 / 7%);
+  --shadow-monthly: 0 0.75rem 2rem rgb(0 0 0 / 6%);
+  --shadow-panel: 0 0.25rem 1rem rgb(30 73 125 / 6%);
+  --shadow-card: 0 0.25rem 1.25rem rgb(0 0 0 / 5%);
+  --shadow-dialog: 0 1.5rem 4rem rgb(0 0 0 / 24%);
+  --shadow-active-control: 0 0.125rem 0.5rem rgb(23 33 31 / 10%);
   --radius-small: 0.5rem;
   --radius-medium: 0.875rem;
   --navigation-mobile-height: 4.5rem;
   --content-max-width: 90rem;
+  --motion-duration-fast: 140ms;
+  --motion-duration-normal: 220ms;
+  --motion-duration-slow: 340ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-background: #0f1113;
+  --color-surface: #181b1e;
+  --color-surface-muted: #25292d;
+  --color-text: #f4f4f2;
+  --color-text-muted: #a8afb6;
+  --color-border: #363b41;
+  --color-primary: #d8dcdf;
+  --color-primary-strong: #f4f4f2;
+  --color-primary-soft: #292e33;
+  --color-success: #3da678;
+  --color-success-strong: #72d7a5;
+  --color-success-soft: #173529;
+  --color-success-action: #21734d;
+  --color-success-action-hover: #185e3e;
+  --color-danger: #df6259;
+  --color-danger-strong: #ff978f;
+  --color-danger-soft: #3a1d1b;
+  --color-danger-action: #bd3930;
+  --color-danger-action-hover: #982d27;
+  --color-info: #5795d8;
+  --color-info-strong: #9bc8ff;
+  --color-info-soft: #172e49;
+  --color-info-action: #2868a8;
+  --color-info-action-hover: #205489;
+  --color-warning: #c99435;
+  --color-warning-strong: #efc56f;
+  --color-warning-soft: #392d16;
+  --color-focus: #8ebfff;
+  --color-action: #f1f1ef;
+  --color-action-hover: #ffffff;
+  --color-on-action: #111315;
+  --color-app-header: rgb(24 27 30 / 94%);
+  --color-monthly-wash: #142133;
+  --color-elevated-glass: rgb(24 27 30 / 84%);
+  --color-input-border: rgb(255 255 255 / 16%);
+  --color-soft-border: rgb(255 255 255 / 7%);
+  --color-subtle-label: #a4abb2;
+  --color-info-hover: #203b59;
+  --color-info-border: rgb(87 149 216 / 28%);
+  --color-danger-border: rgb(223 98 89 / 32%);
+  --color-row-divider: rgb(255 255 255 / 8%);
+  --color-overlay: rgb(0 0 0 / 72%);
+  --color-on-accent: #ffffff;
+  --color-switch-thumb: #ffffff;
+
+  --shadow-navigation: 0 -0.25rem 1.5rem rgb(0 0 0 / 38%);
+  --shadow-surface: 0 0.5rem 1.5rem rgb(0 0 0 / 24%);
+  --shadow-monthly: 0 0.75rem 2rem rgb(0 0 0 / 28%);
+  --shadow-panel: 0 0.25rem 1rem rgb(0 0 0 / 22%);
+  --shadow-card: 0 0.25rem 1.25rem rgb(0 0 0 / 22%);
+  --shadow-dialog: 0 1.5rem 4rem rgb(0 0 0 / 48%);
+  --shadow-active-control: 0 0.125rem 0.5rem rgb(0 0 0 / 32%);
 }
 
 *,
@@ -47,6 +136,8 @@ html {
   min-width: 20rem;
   min-height: 100%;
   background: var(--color-background);
+  transition: background-color var(--motion-duration-normal)
+    var(--motion-ease-standard);
 }
 
 body,
@@ -64,6 +155,9 @@ body {
   color: var(--color-text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition:
+    color var(--motion-duration-normal) var(--motion-ease-standard),
+    background-color var(--motion-duration-normal) var(--motion-ease-standard);
 }
 
 button,
@@ -75,10 +169,38 @@ textarea {
   font-size: 16px !important;
 }
 
+input,
+select,
+textarea {
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-normal) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+button {
+  transition:
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    border-color var(--motion-duration-fast) var(--motion-ease-standard),
+    opacity var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 input[type="date"],
 input[type="month"] {
+  display: block;
+  width: 100%;
+  inline-size: 100%;
   min-width: 0;
+  min-inline-size: 0;
   max-width: 100%;
+  max-inline-size: 100%;
   box-sizing: border-box;
 }
 
@@ -127,6 +249,10 @@ svg {
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
   box-shadow: var(--shadow-navigation);
+  transition:
+    background-color var(--motion-duration-normal) var(--motion-ease-standard),
+    border-color var(--motion-duration-normal) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-normal) var(--motion-ease-standard);
 }
 
 .app-brand {
@@ -140,7 +266,7 @@ svg {
 
 .primary-navigation {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.25rem;
 }
 
@@ -159,8 +285,9 @@ svg {
   font-weight: 650;
   line-height: 1.2;
   transition:
-    background-color 160ms ease,
-    color 160ms ease;
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard),
+    color var(--motion-duration-fast) var(--motion-ease-standard);
 }
 
 .navigation-link:hover {
@@ -169,13 +296,36 @@ svg {
 }
 
 .navigation-link[aria-current="page"] {
-  background: var(--color-primary);
-  color: #ffffff;
+  background: var(--color-action);
+  color: var(--color-on-action);
+}
+
+.navigation-link:active {
+  transform: scale(0.96);
+}
+
+.navigation-link > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .navigation-link__icon {
   font-size: 1.25rem;
   line-height: 1;
+  transition: transform var(--motion-duration-normal)
+    var(--motion-ease-emphasized);
+}
+
+.navigation-link[aria-current="page"] .navigation-link__icon {
+  transform: translateY(-0.0625rem) scale(1.06);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navigation-link:hover .navigation-link__icon {
+    transform: translateY(-0.0625rem) scale(1.06);
+  }
 }
 
 .navigation-link--logout {
@@ -203,9 +353,12 @@ svg {
   align-items: center;
   padding: 0.875rem clamp(1rem, 4vw, 2rem);
   gap: 0.875rem;
-  background: rgb(255 255 255 / 94%);
+  background: var(--color-app-header);
   border-bottom: 1px solid var(--color-border);
   backdrop-filter: blur(0.75rem);
+  transition:
+    background-color var(--motion-duration-normal) var(--motion-ease-standard),
+    border-color var(--motion-duration-normal) var(--motion-ease-standard);
 }
 
 .app-header__logo {
@@ -239,6 +392,80 @@ svg {
 .app-content h2 {
   font-size: clamp(1.5rem, 5vw, 2rem);
   line-height: 1.2;
+}
+
+.app-content > .dashboard-page,
+.app-content > .entries-page,
+.app-content > .catalog-page,
+.app-content > .settings-page,
+.app-content > .login-page {
+  animation: app-page-enter var(--motion-duration-slow)
+    var(--motion-ease-emphasized) backwards;
+}
+
+@keyframes app-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-pop-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes app-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 25rem) {
+  .navigation-link {
+    padding-inline: 0;
+    font-size: 0.625rem;
+  }
 }
 
 @media (min-width: 48rem) {
@@ -362,6 +589,9 @@ svg {
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
