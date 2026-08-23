@@ -4,6 +4,10 @@ import type {
   Product,
   Service,
 } from '../../types';
+import {
+  getAttendanceProductAmount,
+  getAttendanceServiceAmount,
+} from '../attendance';
 
 interface FinancialEntry {
   amount: number;
@@ -63,7 +67,8 @@ function sumInCents(entries: readonly FinancialEntry[]): number {
 function sumServicesInCents(services: readonly Service[]): number {
   return services.reduce((total, service) => {
     const serviceTotal =
-      toCents(service.amount) + toCents(service.product?.amount ?? 0);
+      toCents(getAttendanceServiceAmount(service)) +
+      toCents(getAttendanceProductAmount(service));
     const nextTotal = total + serviceTotal;
 
     if (!Number.isSafeInteger(nextTotal)) {
@@ -96,11 +101,12 @@ function sumDailyWithdrawalsInCents(
   };
 
   for (const service of services) {
-    addRevenue(service);
-
-    if (service.product) {
-      addRevenue({ date: service.date, amount: service.product.amount });
-    }
+    addRevenue({
+      date: service.date,
+      amount:
+        getAttendanceServiceAmount(service) +
+        getAttendanceProductAmount(service),
+    });
   }
 
   for (const product of products) {

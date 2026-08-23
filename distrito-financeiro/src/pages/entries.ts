@@ -8,7 +8,14 @@ import {
   listServicesByMonth,
 } from '../core/database/operations';
 import { getGlobalMonth, setGlobalMonth } from '../core/state';
+import {
+  getAttendanceProductItems,
+  getAttendanceServiceItems,
+  getAttendanceTotal,
+  sumAttendanceItems,
+} from '../core/attendance';
 import type {
+  AttendanceItem,
   CatalogItem,
   ISODate,
   PaymentMethod,
@@ -25,6 +32,14 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 });
 const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   cash: 'Dinheiro',
   card: 'Cartão',
@@ -42,7 +57,8 @@ const entriesStyles = `
   }
 
   .entries-page [hidden],
-  .sales-dialog:not([open]) {
+  .sales-dialog:not([open]),
+  .entries-details-dialog:not([open]) {
     display: none !important;
   }
 
@@ -308,9 +324,21 @@ const entriesStyles = `
     font-weight: 750;
   }
 
+  .sales-items-list {
+    display: grid;
+    gap: 0.75rem;
+  }
+
   .sales-form__fields {
-    grid-template-columns: minmax(12rem, 1.15fr) minmax(14rem, 1.5fr) minmax(8rem, 0.7fr);
+    grid-template-columns: minmax(11rem, 1.15fr) minmax(13rem, 1.5fr) minmax(8rem, 0.7fr) 2.75rem;
     align-items: end;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-row-divider);
+  }
+
+  .sales-form__fields:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .sales-field {
@@ -327,6 +355,38 @@ const entriesStyles = `
   .sales-field small {
     font-size: 0.75rem;
     font-weight: 450;
+  }
+
+  .sales-add-item,
+  .sales-item-remove {
+    min-height: 2.75rem;
+    color: var(--color-text-muted);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .sales-add-item {
+    width: fit-content;
+    margin-top: 0.875rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .sales-item-remove {
+    display: grid;
+    width: 2.75rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-danger);
+    font-size: 1.125rem;
+  }
+
+  .sales-add-item:hover,
+  .sales-item-remove:hover {
+    color: var(--color-text);
+    background: var(--color-surface-muted);
   }
 
   .sales-product-toggle {
@@ -401,7 +461,7 @@ const entriesStyles = `
   .entries-list-header,
   .entries-list-item {
     display: grid;
-    grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 2fr) minmax(7rem, 0.8fr) minmax(7rem, 0.75fr) 3rem;
+    grid-template-columns: minmax(7rem, 0.7fr) minmax(12rem, 1.35fr) minmax(7rem, 0.8fr) minmax(7rem, 0.75fr) 3rem;
     align-items: center;
     gap: 1rem;
   }
@@ -445,6 +505,8 @@ const entriesStyles = `
   .entries-list-item__date {
     color: var(--color-text-muted);
     font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .entries-list-item__details {
@@ -452,16 +514,251 @@ const entriesStyles = `
     gap: 0.25rem;
   }
 
-  .entries-list-item__details strong {
+  .entries-protocol-button {
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.4375rem 0.6875rem;
+    overflow: hidden;
+    color: var(--color-text);
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entries-protocol-button:hover {
+    color: var(--color-success-strong);
+    border-color: var(--color-success-strong);
+  }
+
+  .entries-details-dialog {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    background: transparent;
+    border: 0;
+  }
+
+  .entries-details-dialog::backdrop {
+    background: var(--color-overlay);
+    backdrop-filter: blur(2px);
+  }
+
+  .entries-details-dialog[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .entries-details-dialog:focus {
+    outline: none;
+  }
+
+  .entries-details-card {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(calc(100% - 2rem), 42rem);
+    max-height: min(90vh, 48rem);
+    max-height: min(90dvh, 48rem);
+    overflow: hidden;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-dialog);
+    animation: sales-modal-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized);
+  }
+
+  .entries-details-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .entries-details-heading {
+    display: grid;
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .entries-details-heading h3 {
+    font-size: 1.125rem;
+  }
+
+  .entries-details-heading p {
+    overflow: hidden;
+    color: var(--color-success-strong);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entries-details-close {
+    display: grid;
+    width: 2.75rem;
+    min-height: 2.75rem;
+    flex: 0 0 auto;
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+    border: 0;
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-size: 1.25rem;
+    font-weight: 750;
+  }
+
+  .entries-details-content {
+    display: grid;
+    min-height: 0;
+    gap: 1.25rem;
+    padding: 1.25rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .entries-details-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .entries-details-meta > div {
+    min-width: 0;
+    padding: 0.75rem;
+    background: var(--color-background);
+    border: 1px solid var(--color-row-divider);
+    border-radius: var(--radius-small);
+  }
+
+  .entries-details-meta dt {
+    margin-bottom: 0.25rem;
+    color: var(--color-text-muted);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .entries-details-meta dd {
+    margin: 0;
     overflow-wrap: anywhere;
-    font-size: 1rem;
+    font-size: 0.875rem;
     font-weight: 650;
   }
 
-  .entries-list-item__product {
+  .entries-details-meta > div[data-meta="payment"] {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .entries-details-meta > div[data-meta="payment"] dd {
+    width: fit-content;
+    align-self: center;
+    justify-self: start;
+    padding: 0.25rem 0.625rem;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .entries-details-section {
+    display: grid;
+    gap: 0.625rem;
+  }
+
+  .entries-details-section h4 {
+    font-size: 0.875rem;
+  }
+
+  .entries-details-items {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    list-style: none;
+    border: 1px solid var(--color-row-divider);
+    border-radius: var(--radius-small);
+  }
+
+  .entries-details-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-row-divider);
+    font-size: 0.875rem;
+  }
+
+  .entries-details-item:last-child {
+    border-bottom: 0;
+  }
+
+  .entries-details-item span:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .entries-details-item strong {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .entries-details-summary {
+    display: grid;
+    gap: 0.625rem;
+    padding: 1rem;
+    background: var(--color-success-soft);
+    border-radius: var(--radius-small);
+  }
+
+  .entries-details-summary > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
     color: var(--color-text-muted);
     font-size: 0.8125rem;
-    overflow-wrap: anywhere;
+  }
+
+  .entries-details-summary strong {
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .entries-details-summary__total {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-soft-border);
+    font-size: 0.9375rem !important;
+    font-weight: 750;
+  }
+
+  .entries-details-summary__total strong {
+    color: var(--color-success-strong);
+    font-size: 1.125rem;
   }
 
   .entries-list-item__payment {
@@ -557,6 +854,11 @@ const entriesStyles = `
     .sales-form__fields .sales-field:first-child {
       grid-column: 1 / -1;
     }
+
+    .sales-item-remove {
+      grid-column: 2;
+      justify-self: end;
+    }
   }
 
   @media (max-width: 40rem) {
@@ -593,6 +895,11 @@ const entriesStyles = `
       grid-column: auto;
     }
 
+    .sales-item-remove {
+      grid-column: 1;
+      justify-self: end;
+    }
+
     .sales-form__actions,
     .sales-submit-button {
       width: 100%;
@@ -604,7 +911,7 @@ const entriesStyles = `
 
     .entries-list-item {
       grid-template-columns: minmax(0, 1fr) auto 2.25rem;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto auto auto;
       gap: 0.25rem 0.75rem;
       min-height: 4.75rem;
       padding-block: 1rem;
@@ -617,8 +924,9 @@ const entriesStyles = `
       align-self: end;
     }
 
-    .entries-list-item__details strong {
-      font-weight: 700;
+    .entries-protocol-button {
+      padding: 0.375rem 0.5625rem;
+      font-size: 0.75rem;
     }
 
     .entries-list-item__date {
@@ -630,21 +938,21 @@ const entriesStyles = `
 
     .entries-list-item__payment {
       grid-column: 1;
-      grid-row: 2;
+      grid-row: 3;
       justify-self: start;
-      margin-left: 5.75rem;
+      margin-left: 0;
       font-size: 0.6875rem;
     }
 
     .entries-list-item__amount {
       grid-column: 2;
-      grid-row: 1 / span 2;
+      grid-row: 1 / span 3;
       align-self: center;
     }
 
     .entries-delete-button {
       grid-column: 3;
-      grid-row: 1 / span 2;
+      grid-row: 1 / span 3;
       align-self: center;
       width: 2.25rem;
       min-height: 2.25rem;
@@ -652,10 +960,31 @@ const entriesStyles = `
       background: transparent;
       opacity: 0.7;
     }
+
+    .entries-details-dialog[open] {
+      align-items: flex-end;
+    }
+
+    .entries-details-card {
+      width: 100%;
+      max-height: calc(100dvh - 0.75rem);
+      border-radius: 1rem 1rem 0 0;
+      animation: sales-drawer-enter var(--motion-duration-normal)
+        var(--motion-ease-emphasized);
+    }
+
+    .entries-details-content {
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    }
+
+    .entries-details-meta {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sales-dialog[open] > .sales-form {
+    .sales-dialog[open] > .sales-form,
+    .entries-details-card {
       animation: none;
     }
   }
@@ -725,8 +1054,34 @@ function getEntryDate(entry: ListedEntry): ISODate {
   return entry.record.date;
 }
 
-function getEntryDescription(entry: ListedEntry): string {
-  return entry.record.description;
+function getEntryProtocol(entry: ListedEntry): string {
+  const prefix = entry.kind === 'service' ? 'ATD' : 'PRD';
+  const datePart = entry.record.date.replaceAll('-', '');
+  const idPart = entry.record.id
+    .replace(/[^a-z0-9]/gi, '')
+    .slice(-8)
+    .toUpperCase()
+    .padStart(8, '0');
+
+  return `${prefix}-${datePart}-${idPart}`;
+}
+
+function formatCreatedAt(createdAt?: string): string {
+  if (!createdAt) return 'Horário não registrado';
+
+  const timestamp = new Date(createdAt);
+  return Number.isNaN(timestamp.getTime())
+    ? 'Horário não registrado'
+    : dateTimeFormatter.format(timestamp);
+}
+
+function formatEntryTime(createdAt?: string): string {
+  if (!createdAt) return '--:--';
+
+  const timestamp = new Date(createdAt);
+  return Number.isNaN(timestamp.getTime())
+    ? '--:--'
+    : timeFormatter.format(timestamp);
 }
 
 export async function renderEntries(container: HTMLElement): Promise<void> {
@@ -743,7 +1098,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
           <p class="entries-header__eyebrow">Atendimentos</p>
           <h2 id="entries-title">Lançamentos</h2>
           <p class="entries-header__description">
-            Registre o serviço, o produto opcional e o pagamento em uma única venda.
+            Registre serviços, produtos opcionais e o pagamento em uma única venda.
           </p>
         </div>
 
@@ -811,52 +1166,25 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
             </div>
 
             <fieldset class="sales-form__section">
-              <legend>Serviço</legend>
-              <div class="sales-form__fields">
-                <label class="sales-field" for="sales-service-catalog">
-                  Serviço do catálogo
-                  <select id="sales-service-catalog" name="service-catalog">
-                    <option value="">Carregando catálogo...</option>
-                  </select>
-                </label>
-
-                <label class="sales-field" for="sales-service-description">
-                  Descrição do serviço
-                  <input
-                    id="sales-service-description"
-                    name="service-description"
-                    type="text"
-                    maxlength="160"
-                    autocomplete="off"
-                    placeholder="Ex.: Corte masculino"
-                    required
-                  />
-                </label>
-
-                <label class="sales-field" for="sales-service-amount">
-                  Valor do serviço
-                  <input
-                    id="sales-service-amount"
-                    name="service-amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputmode="decimal"
-                    placeholder="0,00"
-                    required
-                  />
-                </label>
-              </div>
+              <legend>Serviços realizados</legend>
+              <div id="sales-service-items" class="sales-items-list"></div>
+              <button
+                class="sales-add-item"
+                type="button"
+                data-add-item="service"
+              >
+                + Adicionar outro serviço
+              </button>
             </fieldset>
 
-            <label>
+            <label class="sales-product-toggle">
               <input
                 id="sales-has-product"
                 name="has-product"
                 type="checkbox"
                 aria-controls="sales-product-fields"
               />
-              Cliente comprou algum produto
+              Cliente comprou um ou mais produtos
             </label>
 
             <fieldset
@@ -864,40 +1192,15 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
               class="sales-form__section"
               hidden
             >
-              <legend>Produto comprado</legend>
-              <div class="sales-form__fields">
-                <label class="sales-field" for="sales-product-catalog">
-                  Produto do catálogo
-                  <select id="sales-product-catalog" name="product-catalog">
-                    <option value="">Carregando catálogo...</option>
-                  </select>
-                </label>
-
-                <label class="sales-field" for="sales-product-description">
-                  Descrição do produto
-                  <input
-                    id="sales-product-description"
-                    name="product-description"
-                    type="text"
-                    maxlength="160"
-                    autocomplete="off"
-                    placeholder="Ex.: Pomada modeladora"
-                  />
-                </label>
-
-                <label class="sales-field" for="sales-product-amount">
-                  Valor do produto
-                  <input
-                    id="sales-product-amount"
-                    name="product-amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputmode="decimal"
-                    placeholder="0,00"
-                  />
-                </label>
-              </div>
+              <legend>Produtos comprados</legend>
+              <div id="sales-product-items" class="sales-items-list"></div>
+              <button
+                class="sales-add-item"
+                type="button"
+                data-add-item="product"
+              >
+                + Adicionar outro produto
+              </button>
             </fieldset>
 
             <div class="sales-form__summary" aria-live="polite">
@@ -915,9 +1218,15 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
           </form>
         </dialog>
 
+        <dialog
+          class="entries-details-dialog"
+          aria-label="Resumo completo do atendimento"
+          tabindex="-1"
+        ></dialog>
+
         <div class="entries-list-header" aria-hidden="true">
           <span>Data</span>
-          <span>Atendimento</span>
+          <span>Protocolo</span>
           <span>Pagamento</span>
           <span>Valor total</span>
           <span>Ação</span>
@@ -937,6 +1246,10 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     container,
     '.sales-dialog',
   );
+  const detailsDialog = getRequiredElement<HTMLDialogElement>(
+    container,
+    '.entries-details-dialog',
+  );
   const form = getRequiredElement<HTMLFormElement>(container, '.sales-form');
   const openDialogButton = getRequiredElement<HTMLButtonElement>(
     container,
@@ -954,17 +1267,21 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     container,
     '#sales-payment-method',
   );
-  const serviceCatalogSelect = getRequiredElement<HTMLSelectElement>(
+  const serviceItemsContainer = getRequiredElement<HTMLElement>(
     container,
-    '#sales-service-catalog',
+    '#sales-service-items',
   );
-  const serviceDescriptionInput = getRequiredElement<HTMLInputElement>(
+  const productItemsContainer = getRequiredElement<HTMLElement>(
     container,
-    '#sales-service-description',
+    '#sales-product-items',
   );
-  const serviceAmountInput = getRequiredElement<HTMLInputElement>(
+  const addServiceItemButton = getRequiredElement<HTMLButtonElement>(
     container,
-    '#sales-service-amount',
+    '[data-add-item="service"]',
+  );
+  const addProductItemButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '[data-add-item="product"]',
   );
   const hasProductInput = getRequiredElement<HTMLInputElement>(
     container,
@@ -973,18 +1290,6 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
   const productFields = getRequiredElement<HTMLFieldSetElement>(
     container,
     '#sales-product-fields',
-  );
-  const productCatalogSelect = getRequiredElement<HTMLSelectElement>(
-    container,
-    '#sales-product-catalog',
-  );
-  const productDescriptionInput = getRequiredElement<HTMLInputElement>(
-    container,
-    '#sales-product-description',
-  );
-  const productAmountInput = getRequiredElement<HTMLInputElement>(
-    container,
-    '#sales-product-amount',
   );
   const totalElement = getRequiredElement<HTMLElement>(
     container,
@@ -1025,27 +1330,224 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     feedback.classList.toggle('sales-feedback--success', tone === 'success');
   };
 
+  type ItemKind = 'service' | 'product';
+
+  let serviceCatalogItems: readonly CatalogItem[] = [];
+  let productCatalogItems: readonly CatalogItem[] = [];
+  let catalogsLoaded = false;
+  let nextItemIndex = 0;
+
+  const getItemRows = (itemsContainer: HTMLElement): HTMLElement[] =>
+    Array.from(
+      itemsContainer.querySelectorAll<HTMLElement>('.sales-form__fields'),
+    );
+
   const updateTotal = (): void => {
-    const serviceAmount = getSafeAmount(serviceAmountInput.value);
+    const serviceAmount = Array.from(
+      serviceItemsContainer.querySelectorAll<HTMLInputElement>(
+        '[data-item-amount]',
+      ),
+    ).reduce((total, input) => total + getSafeAmount(input.value), 0);
     const productAmount = hasProductInput.checked
-      ? getSafeAmount(productAmountInput.value)
+      ? Array.from(
+          productItemsContainer.querySelectorAll<HTMLInputElement>(
+            '[data-item-amount]',
+          ),
+        ).reduce((total, input) => total + getSafeAmount(input.value), 0)
       : 0;
+
     totalElement.textContent = currencyFormatter.format(
       serviceAmount + productAmount,
     );
+  };
+
+  const refreshRemoveButtons = (itemsContainer: HTMLElement): void => {
+    const rows = getItemRows(itemsContainer);
+
+    for (const row of rows) {
+      const removeButton = getRequiredElement<HTMLButtonElement>(
+        row,
+        '[data-remove-item]',
+      );
+      removeButton.hidden = rows.length === 1;
+    }
+  };
+
+  const configureCatalogSelect = (
+    select: HTMLSelectElement,
+    items: readonly CatalogItem[],
+    descriptionInput: HTMLInputElement,
+    amountInput: HTMLInputElement,
+    kind: ItemKind,
+  ): void => {
+    select.replaceChildren();
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = !catalogsLoaded
+      ? 'Carregando catálogo...'
+      : items.length === 0
+        ? 'Nenhum item cadastrado'
+        : 'Selecione ou preencha manualmente';
+    select.append(placeholder);
+
+    const sortedItems = [...items].sort((first, second) =>
+      first.description.localeCompare(second.description, 'pt-BR'),
+    );
+
+    for (const item of sortedItems) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = `${item.description} — ${currencyFormatter.format(
+        item.price,
+      )}`;
+      select.append(option);
+    }
+
+    select.disabled =
+      !catalogsLoaded ||
+      items.length === 0 ||
+      (kind === 'product' && !hasProductInput.checked);
+    select.onchange = () => {
+      const selectedItem = sortedItems.find((item) => item.id === select.value);
+      if (!selectedItem) return;
+
+      descriptionInput.value = selectedItem.description;
+      amountInput.value = selectedItem.price.toFixed(2);
+      updateTotal();
+    };
+  };
+
+  const createItemRow = (kind: ItemKind): HTMLElement => {
+    const itemIndex = nextItemIndex++;
+    const prefix = `sales-${kind}-${itemIndex}`;
+    const itemLabel = kind === 'service' ? 'Serviço' : 'Produto';
+    const placeholder =
+      kind === 'service' ? 'Ex.: Corte masculino' : 'Ex.: Pomada modeladora';
+    const row = document.createElement('div');
+
+    row.className = 'sales-form__fields';
+    row.dataset.itemKind = kind;
+    row.innerHTML = `
+      <label class="sales-field" for="${prefix}-catalog">
+        ${itemLabel} do catálogo
+        <select id="${prefix}-catalog" data-item-catalog>
+          <option value="">Carregando catálogo...</option>
+        </select>
+      </label>
+
+      <label class="sales-field" for="${prefix}-description">
+        Descrição do ${itemLabel.toLowerCase()}
+        <input
+          id="${prefix}-description"
+          type="text"
+          maxlength="160"
+          autocomplete="off"
+          placeholder="${placeholder}"
+          data-item-description
+          required
+        />
+      </label>
+
+      <label class="sales-field" for="${prefix}-amount">
+        Valor do ${itemLabel.toLowerCase()}
+        <input
+          id="${prefix}-amount"
+          type="number"
+          min="0"
+          step="0.01"
+          inputmode="decimal"
+          placeholder="0,00"
+          data-item-amount
+          required
+        />
+      </label>
+
+      <button
+        class="sales-item-remove"
+        type="button"
+        data-remove-item
+        aria-label="Remover ${itemLabel.toLowerCase()}"
+        title="Remover ${itemLabel.toLowerCase()}"
+      >
+        ×
+      </button>
+    `;
+
+    const catalogSelect = getRequiredElement<HTMLSelectElement>(
+      row,
+      '[data-item-catalog]',
+    );
+    const descriptionInput = getRequiredElement<HTMLInputElement>(
+      row,
+      '[data-item-description]',
+    );
+    const amountInput = getRequiredElement<HTMLInputElement>(
+      row,
+      '[data-item-amount]',
+    );
+    const removeButton = getRequiredElement<HTMLButtonElement>(
+      row,
+      '[data-remove-item]',
+    );
+
+    configureCatalogSelect(
+      catalogSelect,
+      kind === 'service' ? serviceCatalogItems : productCatalogItems,
+      descriptionInput,
+      amountInput,
+      kind,
+    );
+
+    if (kind === 'product' && !hasProductInput.checked) {
+      descriptionInput.disabled = true;
+      amountInput.disabled = true;
+    }
+
+    removeButton.addEventListener('click', () => {
+      const itemsContainer = row.parentElement;
+      if (!itemsContainer || getItemRows(itemsContainer).length === 1) return;
+
+      row.remove();
+      refreshRemoveButtons(itemsContainer);
+      updateTotal();
+    });
+
+    return row;
+  };
+
+  const resetItemRows = (): void => {
+    serviceItemsContainer.replaceChildren(createItemRow('service'));
+    productItemsContainer.replaceChildren(createItemRow('product'));
+    refreshRemoveButtons(serviceItemsContainer);
+    refreshRemoveButtons(productItemsContainer);
   };
 
   const setProductFieldsVisibility = (): void => {
     const hasProduct = hasProductInput.checked;
     productFields.hidden = !hasProduct;
     hasProductInput.setAttribute('aria-expanded', String(hasProduct));
-    productDescriptionInput.required = hasProduct;
-    productAmountInput.required = hasProduct;
 
-    if (!hasProduct) {
-      productCatalogSelect.value = '';
-      productDescriptionInput.value = '';
-      productAmountInput.value = '';
+    for (const row of getItemRows(productItemsContainer)) {
+      const catalogSelect = getRequiredElement<HTMLSelectElement>(
+        row,
+        '[data-item-catalog]',
+      );
+      const descriptionInput = getRequiredElement<HTMLInputElement>(
+        row,
+        '[data-item-description]',
+      );
+      const amountInput = getRequiredElement<HTMLInputElement>(
+        row,
+        '[data-item-amount]',
+      );
+
+      catalogSelect.disabled =
+        !hasProduct || !catalogsLoaded || productCatalogItems.length === 0;
+      descriptionInput.disabled = !hasProduct;
+      amountInput.disabled = !hasProduct;
+      descriptionInput.required = hasProduct;
+      amountInput.required = hasProduct;
     }
 
     updateTotal();
@@ -1055,6 +1557,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     form.reset();
     dateInput.value = getDefaultISODate(referenceMonth);
     hasProductInput.checked = false;
+    resetItemRows();
     setProductFieldsVisibility();
     setFeedback('');
   };
@@ -1110,48 +1613,44 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
   });
 
   hasProductInput.addEventListener('change', setProductFieldsVisibility);
-  serviceAmountInput.addEventListener('input', updateTotal);
-  productAmountInput.addEventListener('input', updateTotal);
+  serviceItemsContainer.addEventListener('input', updateTotal);
+  productItemsContainer.addEventListener('input', updateTotal);
 
-  const configureCatalogSelect = (
-    select: HTMLSelectElement,
-    items: readonly CatalogItem[],
-    descriptionInput: HTMLInputElement,
-    amountInput: HTMLInputElement,
-  ): void => {
-    select.replaceChildren();
+  const appendItemRow = (kind: ItemKind): void => {
+    const itemsContainer =
+      kind === 'service' ? serviceItemsContainer : productItemsContainer;
+    const row = createItemRow(kind);
 
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent =
-      items.length === 0
-        ? 'Nenhum item cadastrado'
-        : 'Selecione ou preencha manualmente';
-    select.append(placeholder);
+    itemsContainer.append(row);
+    refreshRemoveButtons(itemsContainer);
+    getRequiredElement<HTMLInputElement>(
+      row,
+      '[data-item-description]',
+    ).focus({ preventScroll: true });
+  };
 
-    const sortedItems = [...items].sort((first, second) =>
-      first.description.localeCompare(second.description, 'pt-BR'),
-    );
+  addServiceItemButton.addEventListener('click', () =>
+    appendItemRow('service'),
+  );
+  addProductItemButton.addEventListener('click', () =>
+    appendItemRow('product'),
+  );
 
-    for (const item of sortedItems) {
-      const option = document.createElement('option');
-      option.value = item.id;
-      option.textContent = `${item.description} — ${currencyFormatter.format(
-        item.price,
-      )}`;
-      select.append(option);
+  const refreshCatalogRows = (kind: ItemKind): void => {
+    const itemsContainer =
+      kind === 'service' ? serviceItemsContainer : productItemsContainer;
+    const catalogItems =
+      kind === 'service' ? serviceCatalogItems : productCatalogItems;
+
+    for (const row of getItemRows(itemsContainer)) {
+      configureCatalogSelect(
+        getRequiredElement<HTMLSelectElement>(row, '[data-item-catalog]'),
+        catalogItems,
+        getRequiredElement<HTMLInputElement>(row, '[data-item-description]'),
+        getRequiredElement<HTMLInputElement>(row, '[data-item-amount]'),
+        kind,
+      );
     }
-
-    select.disabled = items.length === 0;
-    select.addEventListener('change', () => {
-      const selectedItem = sortedItems.find((item) => item.id === select.value);
-
-      if (!selectedItem) return;
-
-      descriptionInput.value = selectedItem.description;
-      amountInput.value = selectedItem.price.toFixed(2);
-      updateTotal();
-    });
   };
 
   const loadCatalogs = async (): Promise<void> => {
@@ -1162,37 +1661,165 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
       ]);
 
       if (!isCurrentPage()) return;
-
-      configureCatalogSelect(
-        serviceCatalogSelect,
-        services,
-        serviceDescriptionInput,
-        serviceAmountInput,
-      );
-      configureCatalogSelect(
-        productCatalogSelect,
-        products,
-        productDescriptionInput,
-        productAmountInput,
-      );
+      serviceCatalogItems = services;
+      productCatalogItems = products;
     } catch (error) {
       if (!isCurrentPage()) return;
 
       console.error('Não foi possível carregar o catálogo.', error);
-      configureCatalogSelect(
-        serviceCatalogSelect,
-        [],
-        serviceDescriptionInput,
-        serviceAmountInput,
-      );
-      configureCatalogSelect(
-        productCatalogSelect,
-        [],
-        productDescriptionInput,
-        productAmountInput,
-      );
+      serviceCatalogItems = [];
+      productCatalogItems = [];
     }
+
+    catalogsLoaded = true;
+    refreshCatalogRows('service');
+    refreshCatalogRows('product');
+    setProductFieldsVisibility();
   };
+
+  const openEntryDetails = (entry: ListedEntry): void => {
+    const protocol = getEntryProtocol(entry);
+    const record = entry.record;
+    const serviceItems =
+      entry.kind === 'service' ? getAttendanceServiceItems(entry.record) : [];
+    const productItems: readonly AttendanceItem[] =
+      entry.kind === 'service'
+        ? getAttendanceProductItems(entry.record)
+        : [{ description: record.description, amount: record.amount }];
+    const serviceSubtotal = sumAttendanceItems(serviceItems);
+    const productSubtotal = sumAttendanceItems(productItems);
+    const total =
+      entry.kind === 'service'
+        ? getAttendanceTotal(entry.record)
+        : record.amount;
+
+    const card = document.createElement('article');
+    card.className = 'entries-details-card';
+
+    const header = document.createElement('header');
+    header.className = 'entries-details-header';
+
+    const heading = document.createElement('div');
+    heading.className = 'entries-details-heading';
+
+    const title = document.createElement('h3');
+    title.id = 'entries-details-title';
+    title.textContent = 'Resumo da venda';
+
+    const protocolLabel = document.createElement('p');
+    protocolLabel.textContent = protocol;
+    heading.append(title, protocolLabel);
+
+    const closeButton = document.createElement('button');
+    closeButton.className = 'entries-details-close';
+    closeButton.type = 'button';
+    closeButton.textContent = '×';
+    closeButton.title = 'Fechar resumo';
+    closeButton.setAttribute('aria-label', 'Fechar resumo do atendimento');
+    closeButton.addEventListener('click', () => detailsDialog.close());
+    header.append(heading, closeButton);
+
+    const content = document.createElement('div');
+    content.className = 'entries-details-content';
+
+    const meta = document.createElement('dl');
+    meta.className = 'entries-details-meta';
+
+    const appendMeta = (
+      label: string,
+      value: string,
+      metaKey?: string,
+    ): void => {
+      const item = document.createElement('div');
+      if (metaKey) item.dataset.meta = metaKey;
+      const term = document.createElement('dt');
+      const description = document.createElement('dd');
+      term.textContent = label;
+      description.textContent = value;
+      item.append(term, description);
+      meta.append(item);
+    };
+
+    appendMeta('Data da venda', formatDate(record.date));
+    appendMeta('Lançado em', formatCreatedAt(record.createdAt));
+    appendMeta(
+      'Pagamento',
+      record.paymentMethod
+        ? paymentMethodLabels[record.paymentMethod]
+        : 'Não informado',
+      'payment',
+    );
+    appendMeta('ID interno', record.id);
+    content.append(meta);
+
+    const appendItemsSection = (
+      label: string,
+      items: readonly AttendanceItem[],
+    ): void => {
+      if (items.length === 0) return;
+
+      const section = document.createElement('section');
+      section.className = 'entries-details-section';
+      const sectionTitle = document.createElement('h4');
+      sectionTitle.textContent = `${label} (${items.length})`;
+      const list = document.createElement('ul');
+      list.className = 'entries-details-items';
+
+      for (const attendanceItem of items) {
+        const listItem = document.createElement('li');
+        listItem.className = 'entries-details-item';
+        const description = document.createElement('span');
+        description.textContent = attendanceItem.description;
+        const amount = document.createElement('strong');
+        amount.textContent = currencyFormatter.format(attendanceItem.amount);
+        listItem.append(description, amount);
+        list.append(listItem);
+      }
+
+      section.append(sectionTitle, list);
+      content.append(section);
+    };
+
+    appendItemsSection('Serviços', serviceItems);
+    appendItemsSection('Produtos', productItems);
+
+    const summary = document.createElement('div');
+    summary.className = 'entries-details-summary';
+
+    const appendSummaryRow = (
+      label: string,
+      value: number,
+      isTotal = false,
+    ): void => {
+      const row = document.createElement('div');
+      if (isTotal) row.className = 'entries-details-summary__total';
+      const rowLabel = document.createElement('span');
+      rowLabel.textContent = label;
+      const rowValue = document.createElement('strong');
+      rowValue.textContent = currencyFormatter.format(value);
+      row.append(rowLabel, rowValue);
+      summary.append(row);
+    };
+
+    if (serviceItems.length > 0) {
+      appendSummaryRow('Subtotal de serviços', serviceSubtotal);
+    }
+    if (productItems.length > 0) {
+      appendSummaryRow('Subtotal de produtos', productSubtotal);
+    }
+    appendSummaryRow('Total da venda', total, true);
+    content.append(summary);
+
+    card.append(header, content);
+    detailsDialog.setAttribute('aria-labelledby', title.id);
+    detailsDialog.replaceChildren(card);
+    detailsDialog.showModal();
+    closeButton.focus({ preventScroll: true });
+  };
+
+  detailsDialog.addEventListener('click', (event) => {
+    if (event.target === detailsDialog) detailsDialog.close();
+  });
 
   let listVersion = 0;
 
@@ -1221,9 +1848,13 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
         const dateComparison = getEntryDate(second).localeCompare(
           getEntryDate(first),
         );
-        return dateComparison || getEntryDescription(first).localeCompare(
-          getEntryDescription(second),
-          'pt-BR',
+        const timeComparison = (second.record.createdAt ?? '').localeCompare(
+          first.record.createdAt ?? '',
+        );
+        return (
+          dateComparison ||
+          timeComparison ||
+          getEntryProtocol(first).localeCompare(getEntryProtocol(second))
         );
       });
       const fragment = document.createDocumentFragment();
@@ -1241,32 +1872,28 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
 
           const date = document.createElement('time');
           date.className = 'entries-list-item__date';
-          date.dateTime = record.date;
-          date.textContent = formatDate(record.date);
+          date.dateTime = record.createdAt ?? record.date;
+          date.textContent = `${formatDate(record.date)} - ${formatEntryTime(
+            record.createdAt,
+          )}`;
 
           const details = document.createElement('div');
           details.className = 'entries-list-item__details';
 
-          const description = document.createElement('strong');
-          description.textContent =
-            entry.kind === 'service'
-              ? record.description
-              : `Produto: ${record.description}`;
-          details.append(description);
-
-          if (entry.kind === 'service' && entry.record.product) {
-            const product = document.createElement('span');
-            product.className = 'entries-list-item__product';
-            product.textContent = `+ Produto: ${entry.record.product.description} (${currencyFormatter.format(
-              entry.record.product.amount,
-            )})`;
-            details.append(product);
-          } else if (entry.kind === 'legacy-product') {
-            const legacyLabel = document.createElement('span');
-            legacyLabel.className = 'entries-list-item__product';
-            legacyLabel.textContent = 'Venda avulsa registrada anteriormente';
-            details.append(legacyLabel);
-          }
+          const protocol = getEntryProtocol(entry);
+          const protocolButton = document.createElement('button');
+          protocolButton.className = 'entries-protocol-button';
+          protocolButton.type = 'button';
+          protocolButton.textContent = protocol;
+          protocolButton.title = 'Ver resumo completo';
+          protocolButton.setAttribute(
+            'aria-label',
+            `Ver resumo completo do protocolo ${protocol}`,
+          );
+          protocolButton.addEventListener('click', () =>
+            openEntryDetails(entry),
+          );
+          details.append(protocolButton);
 
           const paymentMethod = record.paymentMethod;
           const payment = document.createElement('span');
@@ -1278,7 +1905,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
 
           const total =
             entry.kind === 'service'
-              ? entry.record.amount + (entry.record.product?.amount ?? 0)
+              ? getAttendanceTotal(entry.record)
               : entry.record.amount;
           const amount = document.createElement('span');
           amount.className = 'entries-list-item__amount';
@@ -1341,22 +1968,48 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     }
   };
 
+  const collectAttendanceItems = (
+    itemsContainer: HTMLElement,
+  ): AttendanceItem[] =>
+    getItemRows(itemsContainer).map((row) => {
+      const catalogItemId = getRequiredElement<HTMLSelectElement>(
+        row,
+        '[data-item-catalog]',
+      ).value;
+      const description = getRequiredElement<HTMLInputElement>(
+        row,
+        '[data-item-description]',
+      ).value.trim();
+      const amount = Number(
+        getRequiredElement<HTMLInputElement>(
+          row,
+          '[data-item-amount]',
+        ).value,
+      );
+
+      return {
+        ...(catalogItemId ? { catalogItemId } : {}),
+        description,
+        amount,
+      };
+    });
+
   form.addEventListener('submit', (event) => {
     event.preventDefault();
 
     if (!form.reportValidity()) return;
 
-    const description = serviceDescriptionInput.value.trim();
-    const serviceAmount = Number(serviceAmountInput.value);
     const paymentMethod = paymentMethodSelect.value;
-    const hasProduct = hasProductInput.checked;
-    const productDescription = productDescriptionInput.value.trim();
-    const productAmount = Number(productAmountInput.value);
+    const serviceItems = collectAttendanceItems(serviceItemsContainer);
+    const productItems = hasProductInput.checked
+      ? collectAttendanceItems(productItemsContainer)
+      : [];
+    const hasInvalidItem = (item: AttendanceItem): boolean =>
+      !item.description || !Number.isFinite(item.amount) || item.amount < 0;
 
     if (
-      !description ||
-      !Number.isFinite(serviceAmount) ||
-      serviceAmount < 0 ||
+      serviceItems.length === 0 ||
+      serviceItems.some(hasInvalidItem) ||
       !isPaymentMethod(paymentMethod)
     ) {
       setFeedback(
@@ -1366,15 +2019,13 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
       return;
     }
 
-    if (
-      hasProduct &&
-      (!productDescription ||
-        !Number.isFinite(productAmount) ||
-        productAmount < 0)
-    ) {
-      setFeedback('Preencha o produto e um valor válido.', 'error');
+    if (productItems.some(hasInvalidItem)) {
+      setFeedback('Preencha todos os produtos e seus valores.', 'error');
       return;
     }
+
+    const description = serviceItems.map((item) => item.description).join(', ');
+    const serviceAmount = sumAttendanceItems(serviceItems);
 
     void (async () => {
       submitButton.disabled = true;
@@ -1383,18 +2034,12 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
       try {
         await addService({
           date: dateInput.value as ISODate,
+          createdAt: new Date().toISOString(),
           description,
           amount: serviceAmount,
           paymentMethod,
-          product: hasProduct
-            ? {
-                ...(productCatalogSelect.value
-                  ? { catalogItemId: productCatalogSelect.value }
-                  : {}),
-                description: productDescription,
-                amount: productAmount,
-              }
-            : undefined,
+          serviceItems,
+          productItems: productItems.length > 0 ? productItems : undefined,
         });
 
         if (!isCurrentPage()) return;
@@ -1417,6 +2062,6 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     })();
   });
 
-  setProductFieldsVisibility();
+  resetForm();
   await Promise.all([refreshList(), loadCatalogs()]);
 }

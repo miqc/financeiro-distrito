@@ -19,22 +19,29 @@ export interface Expense extends BaseEntity {
   amount: number;
 }
 
-export interface PurchasedProduct {
+export interface AttendanceItem {
   catalogItemId?: EntityId;
   description: string;
   amount: number;
 }
 
+export type PurchasedProduct = AttendanceItem;
+
 export interface Service extends BaseEntity {
   date: ISODate;
+  createdAt?: string;
   description: string;
   amount: number;
   paymentMethod?: PaymentMethod;
+  serviceItems?: AttendanceItem[];
+  productItems?: AttendanceItem[];
+  /** Produto único mantido para compatibilidade com lançamentos antigos. */
   product?: PurchasedProduct;
 }
 
 export interface Product extends BaseEntity {
   date: ISODate;
+  createdAt?: string;
   description: string;
   amount: number;
   paymentMethod?: PaymentMethod;
