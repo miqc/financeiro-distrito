@@ -39,7 +39,6 @@ type RouteName = keyof typeof ROUTES;
 const appContentElement = document.querySelector<HTMLElement>('#app-content');
 const appNavigationElement =
   document.querySelector<HTMLElement>('.app-navigation');
-const appHeaderElement = document.querySelector<HTMLElement>('.app-header');
 const navigationLinks = Array.from(
   document.querySelectorAll<HTMLAnchorElement>('[data-route]'),
 );
@@ -51,13 +50,12 @@ if (!appContentElement) {
   throw new Error('A área principal da aplicação não foi encontrada.');
 }
 
-if (!appNavigationElement || !appHeaderElement) {
+if (!appNavigationElement) {
   throw new Error('A estrutura de navegação da aplicação não foi encontrada.');
 }
 
 const appContent = appContentElement;
 const appNavigation = appNavigationElement;
-const appHeader = appHeaderElement;
 
 function isRouteName(value: string): value is RouteName {
   return Object.hasOwn(ROUTES, value);
@@ -79,7 +77,6 @@ function getAllowedRoute(route: RouteName): RouteName {
 
 function setLoginLayout(isLoginRoute: boolean): void {
   appNavigation.hidden = isLoginRoute;
-  appHeader.hidden = isLoginRoute;
   document.body.classList.toggle('auth-screen', isLoginRoute);
 }
 
