@@ -262,7 +262,7 @@ svg {
 
 .primary-navigation {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.25rem;
 }
 
@@ -354,6 +354,7 @@ svg {
 
 .app-content > .dashboard-page,
 .app-content > .entries-page,
+.app-content > .expenses-page,
 .app-content > .catalog-page,
 .app-content > .settings-page,
 .app-content > .login-page {

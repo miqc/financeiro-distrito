@@ -46,21 +46,29 @@ const catalogStyles = `
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: clamp(1rem, 3vw, 1.5rem);
-    border-left: 0.35rem solid var(--color-primary);
+    padding: clamp(1.25rem, 4vw, 2rem);
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-monthly);
   }
 
   .catalog-header__content {
     display: grid;
-    gap: 0.25rem;
+    min-width: 0;
+    align-content: center;
+    gap: 0.375rem;
+  }
+
+  .catalog-header__content h2 {
+    font-size: clamp(1.375rem, 4vw, 1.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.2;
   }
 
   .catalog-header__eyebrow {
-    color: var(--color-primary-strong);
-    font-size: 0.75rem;
-    font-weight: 750;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    width: fit-content;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    font-weight: 650;
   }
 
   .catalog-header__description {

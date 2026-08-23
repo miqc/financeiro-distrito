@@ -7,6 +7,8 @@ export type ISODate = `${number}-${number}-${number}`;
 /** Mês de referência no formato YYYY-MM. */
 export type ReferenceMonth = `${number}-${number}`;
 
+export type PaymentMethod = 'cash' | 'card' | 'pix';
+
 export interface BaseEntity {
   id: EntityId;
 }
@@ -17,16 +19,25 @@ export interface Expense extends BaseEntity {
   amount: number;
 }
 
+export interface PurchasedProduct {
+  catalogItemId?: EntityId;
+  description: string;
+  amount: number;
+}
+
 export interface Service extends BaseEntity {
   date: ISODate;
   description: string;
   amount: number;
+  paymentMethod?: PaymentMethod;
+  product?: PurchasedProduct;
 }
 
 export interface Product extends BaseEntity {
   date: ISODate;
   description: string;
   amount: number;
+  paymentMethod?: PaymentMethod;
 }
 
 export interface MonthlyConfig extends BaseEntity {

@@ -5,6 +5,7 @@ import { showConfirmDialog } from './components/confirm-dialog';
 import { renderCatalogPage } from './pages/catalog';
 import { renderDashboard } from './pages/dashboard';
 import { renderEntries } from './pages/entries';
+import { renderExpensesPage } from './pages/expenses';
 import { renderLogin } from './pages/login';
 import { renderSettingsPage } from './pages/settings';
 import './styles/layout.css';
@@ -23,6 +24,10 @@ const ROUTES = {
   entries: {
     navigationLabel: 'Lançamentos',
     pageTitle: 'Lançamentos',
+  },
+  expenses: {
+    navigationLabel: 'Despesas',
+    pageTitle: 'Despesas',
   },
   catalog: {
     navigationLabel: 'Catálogo',
@@ -95,6 +100,8 @@ function renderRoute(requestedRoute: RouteName, moveFocus = false): void {
     void renderDashboard(appContent);
   } else if (route === 'entries') {
     void renderEntries(appContent);
+  } else if (route === 'expenses') {
+    void renderExpensesPage(appContent);
   } else if (route === 'catalog') {
     void renderCatalogPage(appContent);
   } else if (route === 'settings') {

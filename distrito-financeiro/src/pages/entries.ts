@@ -1,63 +1,62 @@
+import { showConfirmDialog } from '../components/confirm-dialog';
 import {
-  addExpense,
-  addProduct,
   addService,
-  deleteExpense,
   deleteProduct,
   deleteService,
-  listExpensesByMonth,
+  listCatalogItems,
   listProductsByMonth,
   listServicesByMonth,
 } from '../core/database/operations';
 import { getGlobalMonth, setGlobalMonth } from '../core/state';
-import { renderCrudPage } from './shared/crud-page';
+import type {
+  CatalogItem,
+  ISODate,
+  PaymentMethod,
+  Product,
+  ReferenceMonth,
+  Service,
+} from '../types';
 
 const ENTRIES_STYLE_ID = 'entries-page-styles';
+const pageVersions = new WeakMap<HTMLElement, number>();
 
-const ENTRY_TABS = ['expenses', 'services', 'products'] as const;
-type EntryTab = (typeof ENTRY_TABS)[number];
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+});
+const dateFormatter = new Intl.DateTimeFormat('pt-BR');
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Dinheiro',
+  card: 'Cartão',
+  pix: 'Pix',
+};
+
+type ListedEntry =
+  | { kind: 'service'; record: Service }
+  | { kind: 'legacy-product'; record: Product };
 
 const entriesStyles = `
   .entries-page {
     display: grid;
-    gap: 1rem;
+    gap: clamp(1rem, 3vw, 1.5rem);
+  }
+
+  .entries-page [hidden],
+  .sales-dialog:not([open]) {
+    display: none !important;
   }
 
   .entries-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(13rem, 16rem);
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 27rem);
     align-items: stretch;
     gap: clamp(1.25rem, 4vw, 2rem);
     padding: clamp(1.25rem, 4vw, 2rem);
     overflow: hidden;
-    background: linear-gradient(135deg, var(--color-surface) 58%, var(--color-monthly-wash) 100%);
-    border: 1px solid var(--color-info-border);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
     box-shadow: var(--shadow-monthly);
-  }
-
-  .entries-header__intro {
-    display: flex;
-    min-width: 0;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-
-  .entries-header__icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 3.25rem;
-    height: 3.25rem;
-    place-items: center;
-    color: var(--color-info-strong);
-    background: var(--color-info-soft);
-    border: 1px solid var(--color-info-border);
-    border-radius: 1rem;
-  }
-
-  .entries-header__icon svg {
-    width: 1.5rem;
-    height: 1.5rem;
   }
 
   .entries-header__content {
@@ -75,14 +74,9 @@ const entriesStyles = `
 
   .entries-header__eyebrow {
     width: fit-content;
-    padding: 0.25rem 0.625rem;
-    color: var(--color-info-strong);
-    background: var(--color-info-soft);
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 750;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    color: var(--color-text);
+    font-size: 0.8125rem;
+    font-weight: 650;
   }
 
   .entries-header__description {
@@ -92,115 +86,444 @@ const entriesStyles = `
 
   .entries-month-field {
     display: grid;
-    width: 100%;
-    max-width: 100%;
+    width: 15rem;
     min-width: 0;
-    align-content: center;
-    gap: 0.5rem;
-    padding: 1rem;
-    color: var(--color-info-strong);
-    background: var(--color-elevated-glass);
-    border: 1px solid var(--color-info-border);
-    border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-panel);
+    gap: 0.375rem;
+    color: var(--color-text-muted);
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 650;
   }
 
-  .entries-month-field input {
+  .entries-month-field input,
+  .sales-field input,
+  .sales-field select {
     width: 100%;
-    max-width: 100%;
     min-width: 0;
-    box-sizing: border-box;
-    -webkit-appearance: none;
-    appearance: none;
     min-height: 2.75rem;
     padding: 0.625rem 0.75rem;
+    color: var(--color-text);
     background: var(--color-surface);
     border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
   }
 
-  .entries-month-field input:hover {
-    border-color: var(--color-info);
+  .entries-month-field input {
+    min-height: 2.625rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-background);
   }
 
-  .entries-month-field input:focus {
-    border-color: var(--color-info);
-    box-shadow: 0 0 0 0.1875rem var(--color-info-soft);
+  .entries-month-field input:hover,
+  .sales-field input:hover,
+  .sales-field select:hover {
+    border-color: var(--color-success);
   }
 
-  .entries-tabs-wrapper {
-    max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: thin;
+  .entries-month-field input:focus,
+  .sales-field input:focus,
+  .sales-field select:focus {
+    border-color: var(--color-success-strong);
+    box-shadow: 0 0 0 0.1875rem var(--color-success-soft);
   }
 
-  .entries-tabs {
+  .entries-panel {
+    overflow: hidden;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-surface);
+  }
+
+  .entries-panel__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .entries-panel__eyebrow {
+    color: var(--color-success-strong);
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .entries-panel__header h3 {
+    font-size: 1.125rem;
+  }
+
+  .entries-header__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .entries-records-status {
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+  }
+
+  .entries-new-button,
+  .sales-submit-button,
+  .sales-dialog__close,
+  .entries-delete-button {
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-weight: 750;
+  }
+
+  .entries-new-button,
+  .sales-submit-button {
+    padding: 0.625rem 1rem;
+    color: var(--color-on-accent);
+    background: var(--color-success-action);
+  }
+
+  .entries-new-button:hover,
+  .sales-submit-button:hover:not(:disabled) {
+    background: var(--color-success-action-hover);
+  }
+
+  .sales-dialog {
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    background: transparent;
+    border: 0;
+  }
+
+  .sales-dialog::backdrop {
+    background: var(--color-overlay);
+    backdrop-filter: blur(2px);
+  }
+
+  .sales-dialog[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sales-dialog[open]::backdrop {
+    animation: app-backdrop-enter var(--motion-duration-normal)
+      var(--motion-ease-standard) both;
+  }
+
+  .sales-dialog:focus {
+    outline: none;
+  }
+
+  .sales-form {
     display: grid;
-    grid-template-columns: repeat(3, minmax(7.5rem, 1fr));
-    width: min(100%, 34rem);
-    min-width: max-content;
-    padding: 0.375rem;
+    width: min(calc(100% - 2rem), 62rem);
+    max-height: min(92vh, 52rem);
+    max-height: min(92dvh, 52rem);
+    gap: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border-radius: var(--radius-medium);
+    box-shadow: var(--shadow-dialog);
+  }
+
+  .sales-dialog[open] > .sales-form {
+    animation: sales-modal-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized);
+  }
+
+  .sales-dialog__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: calc(clamp(1rem, 3vw, 1.5rem) * -1);
+    margin-bottom: 0;
+    padding: 1rem clamp(1rem, 3vw, 1.5rem);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sales-dialog__header h3 {
+    font-size: 1.125rem;
+  }
+
+  .sales-dialog__close {
+    display: grid;
+    width: 2.75rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-muted);
     background: var(--color-surface-muted);
+    font-size: 1.25rem;
+  }
+
+  .sales-dialog__close:hover {
+    color: var(--color-text);
+  }
+
+  .sales-form__meta,
+  .sales-form__fields {
+    display: grid;
+    gap: 0.875rem;
+  }
+
+  .sales-form__meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sales-form__section {
+    min-width: 0;
+    margin: 0;
+    padding: 1rem;
+    background: var(--color-background);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-medium);
   }
 
-  .entries-tab {
-    --entries-tab-accent: var(--color-primary-strong);
-    --entries-tab-soft: var(--color-surface);
-    min-height: 2.75rem;
-    padding: 0.625rem 1rem;
-    color: var(--color-text-muted);
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-small);
-    cursor: pointer;
-    font: inherit;
+  .sales-form__section legend {
+    padding-inline: 0.5rem;
+    color: var(--color-text);
     font-size: 0.875rem;
     font-weight: 750;
-    transition:
-      transform var(--motion-duration-fast) var(--motion-ease-standard),
-      color var(--motion-duration-fast) var(--motion-ease-standard),
-      background-color var(--motion-duration-fast) var(--motion-ease-standard),
-      box-shadow var(--motion-duration-fast) var(--motion-ease-standard);
   }
 
-  .entries-tab[data-entry-tab="expenses"] {
-    --entries-tab-accent: var(--color-danger);
-    --entries-tab-soft: var(--color-danger-soft);
+  .sales-form__fields {
+    grid-template-columns: minmax(12rem, 1.15fr) minmax(14rem, 1.5fr) minmax(8rem, 0.7fr);
+    align-items: end;
   }
 
-  .entries-tab[data-entry-tab="services"] {
-    --entries-tab-accent: var(--color-success-strong);
-    --entries-tab-soft: var(--color-success-soft);
-  }
-
-  .entries-tab[data-entry-tab="products"] {
-    --entries-tab-accent: var(--color-info-strong);
-    --entries-tab-soft: var(--color-info-soft);
-  }
-
-  .entries-tab:hover:not([aria-selected="true"]) {
-    color: var(--entries-tab-accent);
-    background: var(--entries-tab-soft);
-  }
-
-  .entries-tab[aria-selected="true"] {
-    color: var(--entries-tab-accent);
-    background: var(--entries-tab-soft);
-    box-shadow:
-      inset 0 -0.125rem 0 var(--entries-tab-accent),
-      var(--shadow-active-control);
-  }
-
-  .entries-tab:active {
-    transform: scale(0.97);
-  }
-
-  .entries-tab-panel {
+  .sales-field {
+    display: grid;
     min-width: 0;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 550;
+  }
+
+  .sales-field small {
+    font-size: 0.75rem;
+    font-weight: 450;
+  }
+
+  .sales-product-toggle {
+    display: flex;
+    min-height: 3rem;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-text);
+    background: var(--color-success-soft);
+    border: 1px solid var(--color-soft-border);
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .sales-product-toggle input {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: 0 0 auto;
+    accent-color: var(--color-success-action);
+  }
+
+  .sales-form__summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    padding: 0.875rem 1rem;
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
+    border-radius: var(--radius-small);
+    font-size: 0.875rem;
+  }
+
+  .sales-form__summary strong {
+    font-size: 1.125rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sales-form__actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .sales-submit-button:disabled,
+  .entries-delete-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+
+  .sales-feedback {
+    padding: 0.75rem;
+    color: var(--color-text-muted);
+    background: var(--color-background);
+    border-radius: var(--radius-small);
+    font-size: 0.875rem;
+  }
+
+  .sales-feedback--error {
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
+  }
+
+  .sales-feedback--success {
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
+  }
+
+  .entries-list-header,
+  .entries-list-item {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 2fr) minmax(7rem, 0.8fr) minmax(7rem, 0.75fr) 3rem;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .entries-list-header {
+    padding: 0.625rem clamp(1rem, 3vw, 1.5rem);
+    color: var(--color-text-muted);
+    background: var(--color-background);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .entries-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .entries-list-item {
+    min-height: 4.75rem;
+    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+    border-bottom: 1px solid var(--color-border);
+    animation: app-item-enter var(--motion-duration-normal)
+      var(--motion-ease-emphasized) backwards;
+  }
+
+  .entries-list-item:last-child {
+    border-bottom: 0;
+  }
+
+  .entries-list-item__date,
+  .entries-list-item__details,
+  .entries-list-item__payment,
+  .entries-list-item__amount {
+    min-width: 0;
+  }
+
+  .entries-list-item__date {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+  }
+
+  .entries-list-item__details {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .entries-list-item__details strong {
+    overflow-wrap: anywhere;
+    font-size: 0.9375rem;
+  }
+
+  .entries-list-item__product {
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+  }
+
+  .entries-list-item__payment {
+    justify-self: start;
+    padding: 0.25rem 0.625rem;
+    color: var(--color-info-strong);
+    background: var(--color-info-soft);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .entries-list-item__payment[data-payment="unknown"] {
+    color: var(--color-text-muted);
+    background: var(--color-surface-muted);
+  }
+
+  .entries-list-item__amount {
+    color: var(--color-success-strong);
+    font-variant-numeric: tabular-nums;
+    font-weight: 750;
+    text-align: right;
+  }
+
+  .entries-delete-button {
+    display: grid;
+    width: 2.75rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-danger);
+    background: var(--color-danger-soft);
+    font-size: 1.25rem;
+  }
+
+  .entries-delete-button:hover:not(:disabled) {
+    color: var(--color-on-accent);
+    background: var(--color-danger);
+  }
+
+  .entries-empty-state {
+    padding: 2.5rem 1rem;
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  @keyframes sales-modal-enter {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.98);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes sales-drawer-enter {
+    from {
+      transform: translateY(100%);
+    }
+
+    to {
+      transform: none;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .entries-new-button:hover,
+    .sales-submit-button:hover:not(:disabled) {
+      transform: translateY(-0.0625rem);
+    }
   }
 
   @media (max-width: 48rem) {
@@ -208,43 +531,115 @@ const entriesStyles = `
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .entries-header__intro,
+    .entries-header__actions {
+      width: 100%;
+    }
+
     .entries-month-field {
       width: 100%;
+    }
+
+    .sales-form__fields {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .sales-form__fields .sales-field:first-child {
+      grid-column: 1 / -1;
     }
   }
 
-  @media (max-width: 30rem) {
-    .entries-month-field {
+  @media (max-width: 40rem) {
+    .entries-header__actions,
+    .entries-month-field,
+    .entries-new-button {
       width: 100%;
     }
 
-    .entries-tabs-wrapper {
+    .sales-dialog[open] {
+      align-items: flex-end;
+    }
+
+    .sales-form {
       width: 100%;
-      min-width: 0;
-      overflow: visible;
+      max-height: calc(100dvh - 0.75rem);
+      margin-top: auto;
+      border-radius: 1rem 1rem 0 0;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
     }
 
-    .entries-tabs {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+    .sales-dialog[open] > .sales-form {
+      animation: sales-drawer-enter var(--motion-duration-normal)
+        var(--motion-ease-emphasized);
+    }
+
+    .sales-form__meta,
+    .sales-form__fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sales-form__fields .sales-field:first-child {
+      grid-column: auto;
+    }
+
+    .sales-form__actions,
+    .sales-submit-button {
       width: 100%;
-      min-width: 0;
-      max-width: 100%;
     }
 
-    .entries-tab {
-      min-width: 0;
-      padding-inline: 0.5rem;
-      overflow: hidden;
-      font-size: 0.8125rem;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .entries-list-header {
+      display: none;
     }
 
-    .entries-header__icon {
-      width: 2.875rem;
-      height: 2.875rem;
-      border-radius: 0.875rem;
+    .entries-list-item {
+      grid-template-columns: minmax(0, 1fr) auto 2.25rem;
+      grid-template-rows: auto auto;
+      gap: 0.375rem 0.75rem;
+      min-height: 5.5rem;
+      padding-block: 1rem;
+      border-bottom-color: var(--color-row-divider);
+    }
+
+    .entries-list-item__details {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .entries-list-item__date {
+      grid-column: 1;
+      grid-row: 2;
+      align-self: center;
+      font-size: 0.75rem;
+    }
+
+    .entries-list-item__payment {
+      grid-column: 1;
+      grid-row: 2;
+      justify-self: start;
+      margin-left: 5.75rem;
+      font-size: 0.6875rem;
+    }
+
+    .entries-list-item__amount {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+    }
+
+    .entries-delete-button {
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      align-self: center;
+      width: 2.25rem;
+      min-height: 2.25rem;
+      color: var(--color-text-muted);
+      background: transparent;
+      opacity: 0.7;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sales-dialog[open] > .sales-form {
+      animation: none;
     }
   }
 `;
@@ -271,204 +666,740 @@ function getRequiredElement<T extends Element>(
   return element;
 }
 
+function getCurrentISODate(): ISODate {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}` as ISODate;
+}
+
+function getDefaultISODate(referenceMonth: ReferenceMonth): ISODate {
+  const currentDate = getCurrentISODate();
+  return currentDate.startsWith(`${referenceMonth}-`)
+    ? currentDate
+    : (`${referenceMonth}-01` as ISODate);
+}
+
+function getLastDateOfMonth(referenceMonth: ReferenceMonth): ISODate {
+  const [year, month] = referenceMonth.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${referenceMonth}-${String(lastDay).padStart(2, '0')}` as ISODate;
+}
+
+function formatDate(date: ISODate): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const localDate = new Date(year, month - 1, day);
+  return Number.isNaN(localDate.getTime())
+    ? date
+    : dateFormatter.format(localDate);
+}
+
+function isPaymentMethod(value: string): value is PaymentMethod {
+  return Object.hasOwn(paymentMethodLabels, value);
+}
+
+function getSafeAmount(value: string): number {
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+}
+
+function getEntryDate(entry: ListedEntry): ISODate {
+  return entry.record.date;
+}
+
+function getEntryDescription(entry: ListedEntry): string {
+  return entry.record.description;
+}
+
 export async function renderEntries(container: HTMLElement): Promise<void> {
   ensureEntriesStyles();
 
+  const referenceMonth = getGlobalMonth();
+  const pageVersion = (pageVersions.get(container) ?? 0) + 1;
+  pageVersions.set(container, pageVersion);
+
   container.innerHTML = `
     <section class="entries-page" aria-labelledby="entries-title">
-      <div class="entries-tabs-wrapper">
-        <nav class="entries-tabs" role="tablist" aria-label="Tipo de lançamento">
-          <button
-            id="entries-tab-expenses"
-            class="entries-tab"
-            type="button"
-            role="tab"
-            aria-controls="tab-content"
-            aria-selected="true"
-            data-entry-tab="expenses"
-          >
-            Despesas
-          </button>
-          <button
-            id="entries-tab-services"
-            class="entries-tab"
-            type="button"
-            role="tab"
-            aria-controls="tab-content"
-            aria-selected="false"
-            tabindex="-1"
-            data-entry-tab="services"
-          >
-            Serviços
-          </button>
-          <button
-            id="entries-tab-products"
-            class="entries-tab"
-            type="button"
-            role="tab"
-            aria-controls="tab-content"
-            aria-selected="false"
-            tabindex="-1"
-            data-entry-tab="products"
-          >
-            Produtos
-          </button>
-        </nav>
-      </div>
-
       <header class="entries-header">
-        <div class="entries-header__intro">
-          <span class="entries-header__icon" aria-hidden="true">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="3" y="4" width="18" height="17" rx="2" />
-              <path d="M16 2v4M8 2v4M3 10h18" />
-            </svg>
-          </span>
-
-          <div class="entries-header__content">
-            <p class="entries-header__eyebrow">Controle mensal</p>
-            <h2 id="entries-title">Lançamentos</h2>
-            <p class="entries-header__description">
-              Cadastre despesas, serviços e produtos do período selecionado.
-            </p>
-          </div>
+        <div class="entries-header__content">
+          <p class="entries-header__eyebrow">Atendimentos</p>
+          <h2 id="entries-title">Lançamentos</h2>
+          <p class="entries-header__description">
+            Registre o serviço, o produto opcional e o pagamento em uma única venda.
+          </p>
         </div>
 
-        <label class="entries-month-field" for="entries-month">
-          Mês de referência
-          <input
-            id="entries-month"
-            name="entries-reference-month"
-            type="month"
-            min="2020-01"
-            max="2100-12"
-          />
-        </label>
+        <div class="entries-header__actions">
+          <label class="entries-month-field" for="entries-month">
+            Mês de referência
+            <input
+              id="entries-month"
+              name="entries-reference-month"
+              type="month"
+              min="2020-01"
+              max="2100-12"
+            />
+          </label>
+
+          <button class="entries-new-button" type="button">
+            Novo atendimento
+          </button>
+        </div>
       </header>
 
-      <div
-        id="tab-content"
-        class="entries-tab-panel"
-        role="tabpanel"
-        aria-labelledby="entries-tab-expenses"
-        tabindex="0"
-      ></div>
+      <section class="entries-panel" aria-labelledby="entries-records-title">
+        <header class="entries-panel__header">
+          <h3 id="crud-records-title">Atendimentos registrados</h3>
+          <p class="entries-records-status" role="status">Carregando...</p>
+        </header>
+
+        <dialog
+          class="sales-dialog"
+          aria-labelledby="sales-dialog-title"
+          tabindex="-1"
+        >
+          <form class="sales-form">
+            <header class="sales-dialog__header">
+              <h3 id="sales-dialog-title">Novo atendimento</h3>
+              <button
+                class="sales-dialog__close"
+                type="button"
+                aria-label="Cancelar e fechar formulário"
+                title="Cancelar"
+              >
+                ×
+              </button>
+            </header>
+
+            <div class="sales-form__meta">
+              <label class="sales-field" for="sales-date">
+                Data
+                <input id="sales-date" name="date" type="date" required />
+              </label>
+
+              <label class="sales-field" for="sales-payment-method">
+                Forma de pagamento
+                <select
+                  id="sales-payment-method"
+                  name="payment-method"
+                  required
+                >
+                  <option value="">Selecione</option>
+                  <option value="cash">Dinheiro</option>
+                  <option value="card">Cartão</option>
+                  <option value="pix">Pix</option>
+                </select>
+              </label>
+            </div>
+
+            <fieldset class="sales-form__section">
+              <legend>Serviço</legend>
+              <div class="sales-form__fields">
+                <label class="sales-field" for="sales-service-catalog">
+                  Serviço do catálogo
+                  <select id="sales-service-catalog" name="service-catalog">
+                    <option value="">Carregando catálogo...</option>
+                  </select>
+                </label>
+
+                <label class="sales-field" for="sales-service-description">
+                  Descrição do serviço
+                  <input
+                    id="sales-service-description"
+                    name="service-description"
+                    type="text"
+                    maxlength="160"
+                    autocomplete="off"
+                    placeholder="Ex.: Corte masculino"
+                    required
+                  />
+                </label>
+
+                <label class="sales-field" for="sales-service-amount">
+                  Valor do serviço
+                  <input
+                    id="sales-service-amount"
+                    name="service-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                    placeholder="0,00"
+                    required
+                  />
+                </label>
+              </div>
+            </fieldset>
+
+            <label>
+              <input
+                id="sales-has-product"
+                name="has-product"
+                type="checkbox"
+                aria-controls="sales-product-fields"
+              />
+              Cliente comprou algum produto
+            </label>
+
+            <fieldset
+              id="sales-product-fields"
+              class="sales-form__section"
+              hidden
+            >
+              <legend>Produto comprado</legend>
+              <div class="sales-form__fields">
+                <label class="sales-field" for="sales-product-catalog">
+                  Produto do catálogo
+                  <select id="sales-product-catalog" name="product-catalog">
+                    <option value="">Carregando catálogo...</option>
+                  </select>
+                </label>
+
+                <label class="sales-field" for="sales-product-description">
+                  Descrição do produto
+                  <input
+                    id="sales-product-description"
+                    name="product-description"
+                    type="text"
+                    maxlength="160"
+                    autocomplete="off"
+                    placeholder="Ex.: Pomada modeladora"
+                  />
+                </label>
+
+                <label class="sales-field" for="sales-product-amount">
+                  Valor do produto
+                  <input
+                    id="sales-product-amount"
+                    name="product-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputmode="decimal"
+                    placeholder="0,00"
+                  />
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="sales-form__summary" aria-live="polite">
+              <span>Total do atendimento</span>
+              <strong data-sales-total>R$ 0,00</strong>
+            </div>
+
+            <div class="sales-form__actions">
+              <button class="sales-submit-button" type="submit">
+                Salvar atendimento
+              </button>
+            </div>
+
+            <p class="sales-feedback" role="status" aria-live="polite" hidden></p>
+          </form>
+        </dialog>
+
+        <div class="entries-list-header" aria-hidden="true">
+          <span>Data</span>
+          <span>Atendimento</span>
+          <span>Pagamento</span>
+          <span>Valor total</span>
+          <span>Ação</span>
+        </div>
+
+        <ul class="entries-list"></ul>
+      </section>
     </section>
   `;
 
+  const page = getRequiredElement<HTMLElement>(container, '.entries-page');
   const monthInput = getRequiredElement<HTMLInputElement>(
     container,
     '#entries-month',
   );
-  const tabPanel = getRequiredElement<HTMLElement>(container, '#tab-content');
-  const tabButtons = Array.from(
-    container.querySelectorAll<HTMLButtonElement>('[data-entry-tab]'),
+  const dialog = getRequiredElement<HTMLDialogElement>(
+    container,
+    '.sales-dialog',
+  );
+  const form = getRequiredElement<HTMLFormElement>(container, '.sales-form');
+  const openDialogButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.entries-new-button',
+  );
+  const closeDialogButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.sales-dialog__close',
+  );
+  const dateInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-date',
+  );
+  const paymentMethodSelect = getRequiredElement<HTMLSelectElement>(
+    container,
+    '#sales-payment-method',
+  );
+  const serviceCatalogSelect = getRequiredElement<HTMLSelectElement>(
+    container,
+    '#sales-service-catalog',
+  );
+  const serviceDescriptionInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-service-description',
+  );
+  const serviceAmountInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-service-amount',
+  );
+  const hasProductInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-has-product',
+  );
+  const productFields = getRequiredElement<HTMLFieldSetElement>(
+    container,
+    '#sales-product-fields',
+  );
+  const productCatalogSelect = getRequiredElement<HTMLSelectElement>(
+    container,
+    '#sales-product-catalog',
+  );
+  const productDescriptionInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-product-description',
+  );
+  const productAmountInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#sales-product-amount',
+  );
+  const totalElement = getRequiredElement<HTMLElement>(
+    container,
+    '[data-sales-total]',
+  );
+  const submitButton = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.sales-submit-button',
+  );
+  const feedback = getRequiredElement<HTMLElement>(
+    container,
+    '.sales-feedback',
+  );
+  const recordsStatus = getRequiredElement<HTMLElement>(
+    container,
+    '.entries-records-status',
+  );
+  const recordsList = getRequiredElement<HTMLUListElement>(
+    container,
+    '.entries-list',
   );
 
-  let activeTab: EntryTab = 'expenses';
-  let referenceMonth = getGlobalMonth();
+  const isCurrentPage = (): boolean =>
+    pageVersions.get(container) === pageVersion && container.contains(page);
+
   monthInput.value = referenceMonth;
+  dateInput.value = getDefaultISODate(referenceMonth);
+  dateInput.min = `${referenceMonth}-01`;
+  dateInput.max = getLastDateOfMonth(referenceMonth);
 
-  const renderActiveTab = async (tab: EntryTab): Promise<void> => {
-    activeTab = tab;
-
-    for (const button of tabButtons) {
-      const isActive = button.dataset.entryTab === tab;
-      button.setAttribute('aria-selected', String(isActive));
-      button.tabIndex = isActive ? 0 : -1;
-    }
-
-    tabPanel.setAttribute('aria-labelledby', `entries-tab-${tab}`);
-
-    if (tab === 'expenses') {
-      await renderCrudPage(
-        tabPanel,
-        {
-          title: 'Despesas',
-          accent: 'danger',
-          addRecord: addExpense,
-          listRecordsByMonth: listExpensesByMonth,
-          deleteRecord: deleteExpense,
-        },
-        referenceMonth,
-      );
-    } else if (tab === 'services') {
-      await renderCrudPage(
-        tabPanel,
-        {
-          title: 'Serviços',
-          accent: 'success',
-          addRecord: addService,
-          listRecordsByMonth: listServicesByMonth,
-          deleteRecord: deleteService,
-          catalogType: 'service',
-        },
-        referenceMonth,
-      );
-    } else {
-      await renderCrudPage(
-        tabPanel,
-        {
-          title: 'Produtos',
-          accent: 'info',
-          addRecord: addProduct,
-          listRecordsByMonth: listProductsByMonth,
-          deleteRecord: deleteProduct,
-          catalogType: 'product',
-        },
-        referenceMonth,
-      );
-    }
+  const setFeedback = (
+    message: string,
+    tone?: 'error' | 'success',
+  ): void => {
+    feedback.hidden = message.length === 0;
+    feedback.textContent = message;
+    feedback.classList.toggle('sales-feedback--error', tone === 'error');
+    feedback.classList.toggle('sales-feedback--success', tone === 'success');
   };
+
+  const updateTotal = (): void => {
+    const serviceAmount = getSafeAmount(serviceAmountInput.value);
+    const productAmount = hasProductInput.checked
+      ? getSafeAmount(productAmountInput.value)
+      : 0;
+    totalElement.textContent = currencyFormatter.format(
+      serviceAmount + productAmount,
+    );
+  };
+
+  const setProductFieldsVisibility = (): void => {
+    const hasProduct = hasProductInput.checked;
+    productFields.hidden = !hasProduct;
+    hasProductInput.setAttribute('aria-expanded', String(hasProduct));
+    productDescriptionInput.required = hasProduct;
+    productAmountInput.required = hasProduct;
+
+    if (!hasProduct) {
+      productCatalogSelect.value = '';
+      productDescriptionInput.value = '';
+      productAmountInput.value = '';
+    }
+
+    updateTotal();
+  };
+
+  const resetForm = (): void => {
+    form.reset();
+    dateInput.value = getDefaultISODate(referenceMonth);
+    hasProductInput.checked = false;
+    setProductFieldsVisibility();
+    setFeedback('');
+  };
+
+  let lastDialogInteractionWasPointer = false;
+
+  openDialogButton.addEventListener('pointerdown', () => {
+    lastDialogInteractionWasPointer = true;
+  });
+  openDialogButton.addEventListener('keydown', () => {
+    lastDialogInteractionWasPointer = false;
+  });
+  dialog.addEventListener('pointerdown', () => {
+    lastDialogInteractionWasPointer = true;
+  });
+  dialog.addEventListener('keydown', () => {
+    lastDialogInteractionWasPointer = false;
+  });
+
+  openDialogButton.addEventListener('click', (event) => {
+    if (dialog.open) return;
+
+    resetForm();
+    if (event.detail > 0) lastDialogInteractionWasPointer = true;
+    dialog.showModal();
+
+    if (lastDialogInteractionWasPointer) {
+      dialog.focus({ preventScroll: true });
+    } else {
+      dateInput.focus({ preventScroll: true });
+    }
+  });
+
+  closeDialogButton.addEventListener('click', () => dialog.close('cancel'));
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close('cancel');
+  });
+  dialog.addEventListener('close', () => {
+    setFeedback('');
+
+    if (lastDialogInteractionWasPointer) {
+      requestAnimationFrame(() => {
+        if (openDialogButton.isConnected) openDialogButton.blur();
+      });
+    }
+  });
 
   monthInput.addEventListener('change', () => {
     if (!monthInput.reportValidity() || !monthInput.value) return;
 
     setGlobalMonth(monthInput.value);
-    referenceMonth = getGlobalMonth();
-    void renderActiveTab(activeTab);
+    void renderEntries(container);
   });
 
-  for (const button of tabButtons) {
-    button.addEventListener('click', () => {
-      const tab = button.dataset.entryTab as EntryTab | undefined;
+  hasProductInput.addEventListener('change', setProductFieldsVisibility);
+  serviceAmountInput.addEventListener('input', updateTotal);
+  productAmountInput.addEventListener('input', updateTotal);
 
-      if (!tab || !ENTRY_TABS.includes(tab)) return;
+  const configureCatalogSelect = (
+    select: HTMLSelectElement,
+    items: readonly CatalogItem[],
+    descriptionInput: HTMLInputElement,
+    amountInput: HTMLInputElement,
+  ): void => {
+    select.replaceChildren();
 
-      void renderActiveTab(tab);
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent =
+      items.length === 0
+        ? 'Nenhum item cadastrado — preencha manualmente'
+        : 'Selecione ou preencha manualmente';
+    select.append(placeholder);
+
+    const sortedItems = [...items].sort((first, second) =>
+      first.description.localeCompare(second.description, 'pt-BR'),
+    );
+
+    for (const item of sortedItems) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = `${item.description} — ${currencyFormatter.format(
+        item.price,
+      )}`;
+      select.append(option);
+    }
+
+    select.disabled = items.length === 0;
+    select.addEventListener('change', () => {
+      const selectedItem = sortedItems.find((item) => item.id === select.value);
+
+      if (!selectedItem) return;
+
+      descriptionInput.value = selectedItem.description;
+      amountInput.value = selectedItem.price.toFixed(2);
+      updateTotal();
     });
+  };
 
-    button.addEventListener('keydown', (event) => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-        return;
+  const loadCatalogs = async (): Promise<void> => {
+    try {
+      const [services, products] = await Promise.all([
+        listCatalogItems('service'),
+        listCatalogItems('product'),
+      ]);
+
+      if (!isCurrentPage()) return;
+
+      configureCatalogSelect(
+        serviceCatalogSelect,
+        services,
+        serviceDescriptionInput,
+        serviceAmountInput,
+      );
+      configureCatalogSelect(
+        productCatalogSelect,
+        products,
+        productDescriptionInput,
+        productAmountInput,
+      );
+    } catch (error) {
+      if (!isCurrentPage()) return;
+
+      console.error('Não foi possível carregar o catálogo.', error);
+      configureCatalogSelect(
+        serviceCatalogSelect,
+        [],
+        serviceDescriptionInput,
+        serviceAmountInput,
+      );
+      configureCatalogSelect(
+        productCatalogSelect,
+        [],
+        productDescriptionInput,
+        productAmountInput,
+      );
+    }
+  };
+
+  let listVersion = 0;
+
+  const refreshList = async (): Promise<void> => {
+    const currentListVersion = ++listVersion;
+    recordsStatus.textContent = 'Atualizando...';
+
+    try {
+      const [services, legacyProducts] = await Promise.all([
+        listServicesByMonth(referenceMonth),
+        listProductsByMonth(referenceMonth),
+      ]);
+
+      if (!isCurrentPage() || currentListVersion !== listVersion) return;
+
+      const entries: ListedEntry[] = [
+        ...services.map((record) => ({
+          kind: 'service' as const,
+          record,
+        })),
+        ...legacyProducts.map((record) => ({
+          kind: 'legacy-product' as const,
+          record,
+        })),
+      ].sort((first, second) => {
+        const dateComparison = getEntryDate(second).localeCompare(
+          getEntryDate(first),
+        );
+        return dateComparison || getEntryDescription(first).localeCompare(
+          getEntryDescription(second),
+          'pt-BR',
+        );
+      });
+      const fragment = document.createDocumentFragment();
+
+      if (entries.length === 0) {
+        const emptyState = document.createElement('li');
+        emptyState.className = 'entries-empty-state';
+        emptyState.textContent = 'Nenhum atendimento encontrado neste mês.';
+        fragment.append(emptyState);
+      } else {
+        for (const entry of entries) {
+          const record = entry.record;
+          const item = document.createElement('li');
+          item.className = 'entries-list-item';
+
+          const date = document.createElement('time');
+          date.className = 'entries-list-item__date';
+          date.dateTime = record.date;
+          date.textContent = formatDate(record.date);
+
+          const details = document.createElement('div');
+          details.className = 'entries-list-item__details';
+
+          const description = document.createElement('strong');
+          description.textContent =
+            entry.kind === 'service'
+              ? record.description
+              : `Produto: ${record.description}`;
+          details.append(description);
+
+          if (entry.kind === 'service' && entry.record.product) {
+            const product = document.createElement('span');
+            product.className = 'entries-list-item__product';
+            product.textContent = `+ Produto: ${entry.record.product.description} (${currencyFormatter.format(
+              entry.record.product.amount,
+            )})`;
+            details.append(product);
+          } else if (entry.kind === 'legacy-product') {
+            const legacyLabel = document.createElement('span');
+            legacyLabel.className = 'entries-list-item__product';
+            legacyLabel.textContent = 'Venda avulsa registrada anteriormente';
+            details.append(legacyLabel);
+          }
+
+          const paymentMethod = record.paymentMethod;
+          const payment = document.createElement('span');
+          payment.className = 'entries-list-item__payment';
+          payment.dataset.payment = paymentMethod ?? 'unknown';
+          payment.textContent = paymentMethod
+            ? paymentMethodLabels[paymentMethod]
+            : 'Não informado';
+
+          const total =
+            entry.kind === 'service'
+              ? entry.record.amount + (entry.record.product?.amount ?? 0)
+              : entry.record.amount;
+          const amount = document.createElement('span');
+          amount.className = 'entries-list-item__amount';
+          amount.textContent = currencyFormatter.format(total);
+
+          const deleteButton = document.createElement('button');
+          deleteButton.className = 'entries-delete-button';
+          deleteButton.type = 'button';
+          deleteButton.textContent = '×';
+          deleteButton.title = 'Excluir lançamento';
+          deleteButton.setAttribute(
+            'aria-label',
+            `Excluir lançamento: ${record.description}`,
+          );
+
+          deleteButton.addEventListener('click', async () => {
+            const confirmed = await showConfirmDialog(
+              'Confirmar exclusão',
+              'Deseja realmente excluir este lançamento?',
+            );
+
+            if (!confirmed) return;
+
+            deleteButton.disabled = true;
+            recordsStatus.textContent = 'Excluindo lançamento...';
+
+            try {
+              if (entry.kind === 'service') {
+                await deleteService(record.id);
+              } else {
+                await deleteProduct(record.id);
+              }
+
+              if (!isCurrentPage()) return;
+              await refreshList();
+            } catch (error) {
+              if (!isCurrentPage()) return;
+
+              console.error('Não foi possível excluir o lançamento.', error);
+              recordsStatus.textContent = 'Erro ao excluir';
+              deleteButton.disabled = false;
+            }
+          });
+
+          item.append(date, details, payment, amount, deleteButton);
+          fragment.append(item);
+        }
       }
 
-      event.preventDefault();
+      recordsList.replaceChildren(fragment);
+      recordsStatus.textContent = `${entries.length} lançamento${
+        entries.length === 1 ? '' : 's'
+      }`;
+    } catch (error) {
+      if (!isCurrentPage() || currentListVersion !== listVersion) return;
 
-      const currentIndex = tabButtons.indexOf(button);
-      let nextIndex = currentIndex;
+      console.error('Não foi possível listar os lançamentos.', error);
+      recordsStatus.textContent = 'Erro ao carregar';
+      recordsList.replaceChildren();
+    }
+  };
 
-      if (event.key === 'ArrowLeft') {
-        nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
-      } else if (event.key === 'ArrowRight') {
-        nextIndex = (currentIndex + 1) % tabButtons.length;
-      } else if (event.key === 'Home') {
-        nextIndex = 0;
-      } else if (event.key === 'End') {
-        nextIndex = tabButtons.length - 1;
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    if (!form.reportValidity()) return;
+
+    const description = serviceDescriptionInput.value.trim();
+    const serviceAmount = Number(serviceAmountInput.value);
+    const paymentMethod = paymentMethodSelect.value;
+    const hasProduct = hasProductInput.checked;
+    const productDescription = productDescriptionInput.value.trim();
+    const productAmount = Number(productAmountInput.value);
+
+    if (
+      !description ||
+      !Number.isFinite(serviceAmount) ||
+      serviceAmount < 0 ||
+      !isPaymentMethod(paymentMethod)
+    ) {
+      setFeedback(
+        'Preencha o serviço, o valor e a forma de pagamento.',
+        'error',
+      );
+      return;
+    }
+
+    if (
+      hasProduct &&
+      (!productDescription ||
+        !Number.isFinite(productAmount) ||
+        productAmount < 0)
+    ) {
+      setFeedback('Preencha o produto e um valor válido.', 'error');
+      return;
+    }
+
+    void (async () => {
+      submitButton.disabled = true;
+      setFeedback('Salvando atendimento...');
+
+      try {
+        await addService({
+          date: dateInput.value as ISODate,
+          description,
+          amount: serviceAmount,
+          paymentMethod,
+          product: hasProduct
+            ? {
+                ...(productCatalogSelect.value
+                  ? { catalogItemId: productCatalogSelect.value }
+                  : {}),
+                description: productDescription,
+                amount: productAmount,
+              }
+            : undefined,
+        });
+
+        if (!isCurrentPage()) return;
+
+        await refreshList();
+        setFeedback('Atendimento salvo com sucesso.', 'success');
+
+        if (dialog.open) dialog.close('saved');
+      } catch (error) {
+        if (!isCurrentPage()) return;
+
+        console.error('Não foi possível salvar o atendimento.', error);
+        setFeedback(
+          'Não foi possível salvar o atendimento. Tente novamente.',
+          'error',
+        );
+      } finally {
+        if (isCurrentPage()) submitButton.disabled = false;
       }
+    })();
+  });
 
-      tabButtons[nextIndex].focus();
-      tabButtons[nextIndex].click();
-    });
-  }
-
-  await renderActiveTab('expenses');
+  setProductFieldsVisibility();
+  await Promise.all([refreshList(), loadCatalogs()]);
 }

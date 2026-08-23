@@ -737,7 +737,7 @@ export async function renderCrudPage<T extends CrudRecord>(
 
       <section class="crud-records" aria-labelledby="crud-records-title">
         <header class="crud-records__header">
-          <h3 id="crud-records-title">Lançamentos do mês</h3>
+          <h3 id="crud-records-title">Despesas do mês</h3>
           <p class="crud-records__status" role="status">Carregando...</p>
         </header>
 

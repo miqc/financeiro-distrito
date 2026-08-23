@@ -60,16 +60,31 @@ function sumInCents(entries: readonly FinancialEntry[]): number {
   }, 0);
 }
 
+function sumServicesInCents(services: readonly Service[]): number {
+  return services.reduce((total, service) => {
+    const serviceTotal =
+      toCents(service.amount) + toCents(service.product?.amount ?? 0);
+    const nextTotal = total + serviceTotal;
+
+    if (!Number.isSafeInteger(nextTotal)) {
+      throw new RangeError('A soma financeira excede o limite suportado.');
+    }
+
+    return nextTotal;
+  }, 0);
+}
+
 function calculateWithdrawalInCents(totalInCents: number): number {
   return Math.round(totalInCents * 0.1);
 }
 
 function sumDailyWithdrawalsInCents(
-  entries: readonly DatedFinancialEntry[],
+  services: readonly Service[],
+  products: readonly Product[],
 ): number {
   const revenueByDate = new Map<string, number>();
 
-  for (const entry of entries) {
+  const addRevenue = (entry: DatedFinancialEntry): void => {
     const currentRevenue = revenueByDate.get(entry.date) ?? 0;
     const dailyRevenue = currentRevenue + toCents(entry.amount);
 
@@ -78,6 +93,18 @@ function sumDailyWithdrawalsInCents(
     }
 
     revenueByDate.set(entry.date, dailyRevenue);
+  };
+
+  for (const service of services) {
+    addRevenue(service);
+
+    if (service.product) {
+      addRevenue({ date: service.date, amount: service.product.amount });
+    }
+  }
+
+  for (const product of products) {
+    addRevenue(product);
   }
 
   let totalWithdrawals = 0;
@@ -102,7 +129,7 @@ export function calculateDailySummary(
   products: readonly Product[],
 ): DailySummary {
   const totalRevenueInCents =
-    sumInCents(services) + sumInCents(products);
+    sumServicesInCents(services) + sumInCents(products);
   const totalWithdrawalInCents = calculateWithdrawalInCents(
     totalRevenueInCents,
   );
@@ -120,10 +147,11 @@ export function calculateMonthlySummary(
   config: Pick<MonthlyConfig, 'workingDays'>,
 ): MonthlySummary {
   const totalRevenueInCents =
-    sumInCents(services) + sumInCents(products);
+    sumServicesInCents(services) + sumInCents(products);
   const totalExpensesInCents = sumInCents(expenses);
   const totalWithdrawalsInCents = sumDailyWithdrawalsInCents(
-    [...services, ...products],
+    services,
+    products,
   );
 
   const dailyGoalInCents =
