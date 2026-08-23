@@ -54,6 +54,7 @@ const expensesStyles = `
 
   .expenses-header__actions {
     display: flex;
+    min-width: 0;
     flex-wrap: wrap;
     align-items: end;
     justify-content: flex-end;
@@ -120,6 +121,7 @@ const expensesStyles = `
     .expenses-header__actions,
     .expenses-month-field {
       width: 100%;
+      max-width: 100%;
     }
   }
 

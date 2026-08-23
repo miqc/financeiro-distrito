@@ -406,6 +406,10 @@ const dashboardStyles = `
     .dashboard-filters {
       width: 100%;
     }
+
+    .dashboard-quick-actions__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -611,6 +615,80 @@ export async function renderDashboard(
           </label>
         </div>
       </header>
+
+      <nav class="dashboard-quick-actions" aria-labelledby="dashboard-quick-actions-title">
+
+        <div class="dashboard-quick-actions__grid">
+          <a
+            class="dashboard-quick-action dashboard-quick-action--entries"
+            href="#entries"
+          >
+            <span class="dashboard-quick-action__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M8 6h13M8 12h13M8 18h13" />
+                <path d="M3 6h.01M3 12h.01M3 18h.01" />
+              </svg>
+            </span>
+            <span class="dashboard-quick-action__content">
+              <strong>Novo lançamento</strong>
+              <small>Registre um atendimento e a forma de pagamento.</small>
+            </span>
+            <span class="dashboard-quick-action__arrow" aria-hidden="true">→</span>
+          </a>
+
+          <a
+            class="dashboard-quick-action dashboard-quick-action--expenses"
+            href="#expenses"
+          >
+            <span class="dashboard-quick-action__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 2h12a2 2 0 0 1 2 2v18l-4-2-4 2-4-2-4 2V4a2 2 0 0 1 2-2Z" />
+                <path d="M8 7h8M8 11h8M8 15h5" />
+              </svg>
+            </span>
+            <span class="dashboard-quick-action__content">
+              <strong>Nova despesa</strong>
+              <small>Adicione um gasto e mantenha o resultado correto.</small>
+            </span>
+            <span class="dashboard-quick-action__arrow" aria-hidden="true">→</span>
+          </a>
+
+          <a class="dashboard-quick-action" href="#catalog">
+            <span class="dashboard-quick-action__icon" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M20.6 13.6 11 23.2 1.8 14V3h11l7.8 7.8a2 2 0 0 1 0 2.8Z" />
+                <circle cx="7.5" cy="8.5" r="1.25" />
+              </svg>
+            </span>
+            <span class="dashboard-quick-action__content">
+              <strong>Gerenciar catálogo</strong>
+              <small>Cadastre serviços e produtos para agilizar lançamentos.</small>
+            </span>
+            <span class="dashboard-quick-action__arrow" aria-hidden="true">→</span>
+          </a>
+        </div>
+      </nav>
 
       <p class="dashboard-feedback" role="status">Carregando resumo...</p>
 

@@ -110,7 +110,9 @@ const entriesStyles = `
   .entries-month-field input {
     min-height: 2.625rem;
     padding: 0.5rem 0.75rem;
+    color: var(--color-text-muted);
     background: var(--color-background);
+    font-weight: 650;
   }
 
   .entries-month-field input:hover,
@@ -139,8 +141,8 @@ const entriesStyles = `
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    padding: clamp(1rem, 3vw, 1.5rem);
+    gap: 0.5rem;
+    padding: 1rem clamp(1rem, 3vw, 1.5rem);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -153,11 +155,12 @@ const entriesStyles = `
   }
 
   .entries-panel__header h3 {
-    font-size: 1.125rem;
+    font-size: 1rem;
   }
 
   .entries-header__actions {
     display: flex;
+    min-width: 0;
     flex-wrap: wrap;
     align-items: end;
     justify-content: flex-end;
@@ -240,6 +243,11 @@ const entriesStyles = `
     box-shadow: var(--shadow-dialog);
   }
 
+  .sales-form > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .sales-dialog[open] > .sales-form {
     animation: sales-modal-enter var(--motion-duration-normal)
       var(--motion-ease-emphasized);
@@ -307,7 +315,9 @@ const entriesStyles = `
 
   .sales-field {
     display: grid;
+    width: 100%;
     min-width: 0;
+    max-width: 100%;
     gap: 0.5rem;
     color: var(--color-text-muted);
     font-size: 0.8125rem;
@@ -414,8 +424,8 @@ const entriesStyles = `
   }
 
   .entries-list-item {
-    min-height: 4.75rem;
-    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+    min-height: 4rem;
+    padding: 0.625rem clamp(1rem, 3vw, 1.5rem);
     border-bottom: 1px solid var(--color-border);
     animation: app-item-enter var(--motion-duration-normal)
       var(--motion-ease-emphasized) backwards;
@@ -444,7 +454,8 @@ const entriesStyles = `
 
   .entries-list-item__details strong {
     overflow-wrap: anywhere;
-    font-size: 0.9375rem;
+    font-size: 1rem;
+    font-weight: 650;
   }
 
   .entries-list-item__product {
@@ -553,6 +564,7 @@ const entriesStyles = `
     .entries-month-field,
     .entries-new-button {
       width: 100%;
+      max-width: 100%;
     }
 
     .sales-dialog[open] {
@@ -593,8 +605,8 @@ const entriesStyles = `
     .entries-list-item {
       grid-template-columns: minmax(0, 1fr) auto 2.25rem;
       grid-template-rows: auto auto;
-      gap: 0.375rem 0.75rem;
-      min-height: 5.5rem;
+      gap: 0.25rem 0.75rem;
+      min-height: 4.75rem;
       padding-block: 1rem;
       border-bottom-color: var(--color-row-divider);
     }
@@ -602,6 +614,11 @@ const entriesStyles = `
     .entries-list-item__details {
       grid-column: 1;
       grid-row: 1;
+      align-self: end;
+    }
+
+    .entries-list-item__details strong {
+      font-weight: 700;
     }
 
     .entries-list-item__date {
@@ -743,7 +760,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
           </label>
 
           <button class="entries-new-button" type="button">
-            Novo atendimento
+            Novo lançamento
           </button>
         </div>
       </header>
@@ -761,7 +778,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
         >
           <form class="sales-form">
             <header class="sales-dialog__header">
-              <h3 id="sales-dialog-title">Novo atendimento</h3>
+              <h3 id="sales-dialog-title">Novo Lançamento</h3>
               <button
                 class="sales-dialog__close"
                 type="button"
@@ -1108,7 +1125,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
     placeholder.value = '';
     placeholder.textContent =
       items.length === 0
-        ? 'Nenhum item cadastrado — preencha manualmente'
+        ? 'Nenhum item cadastrado'
         : 'Selecione ou preencha manualmente';
     select.append(placeholder);
 
