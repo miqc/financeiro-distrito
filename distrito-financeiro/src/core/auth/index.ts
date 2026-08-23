@@ -1,23 +1,25 @@
-import { pbkdf2Async } from '@noble/hashes/pbkdf2.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+const API_BASE_URL = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+const LEGACY_CREDENTIALS_KEY = 'distrito_auth_credentials';
+const LEGACY_SESSION_KEY = 'distrito_is_logged_in';
+const DEFAULT_ACCOUNT_EMAIL = 'admin@distrito.com';
 
-const SESSION_KEY = 'distrito_is_logged_in';
-const AUTHENTICATED_VALUE = 'true';
-const CREDENTIALS_STORAGE_KEY = 'distrito_auth_credentials';
-const PASSWORD_HASH_ITERATIONS = 210_000;
-const SALT_BYTE_LENGTH = 16;
-
-const DEFAULT_CREDENTIALS = Object.freeze({
-  email: 'admin@distrito.com',
-  password: 'admin',
-});
-
-interface StoredCredentials {
-  version: 1;
+interface SessionState {
+  authenticated: boolean;
   email: string;
-  passwordHash: string;
-  salt: string;
-  iterations: number;
+}
+
+interface SessionResponse {
+  authenticated: boolean;
+  email?: string;
+}
+
+interface AccountResponse {
+  updated: boolean;
+  email: string;
+}
+
+interface ApiErrorResponse {
+  error?: string;
 }
 
 export interface UpdateCredentialsInput {
@@ -26,272 +28,132 @@ export interface UpdateCredentialsInput {
   newPassword?: string;
 }
 
-const textEncoder = new TextEncoder();
+let sessionState: SessionState = {
+  authenticated: false,
+  email: DEFAULT_ACCOUNT_EMAIL,
+};
 
-function getSessionStorage(): Storage | null {
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}/api${path}`;
+}
+
+function clearLegacyAuthentication(): void {
   try {
-    return window.sessionStorage;
+    window.localStorage.removeItem(LEGACY_CREDENTIALS_KEY);
+    window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
   } catch (error) {
-    console.error('O armazenamento da sessão não está disponível.', error);
-    return null;
+    console.warn('Não foi possível remover os dados de acesso antigos.', error);
   }
 }
 
-function getCredentialsStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch (error) {
-    console.error('O armazenamento das credenciais não está disponível.', error);
-    return null;
-  }
+async function readJson<T>(response: Response): Promise<T> {
+  return (await response.json()) as T;
 }
 
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function isStoredCredentials(value: unknown): value is StoredCredentials {
-  if (!value || typeof value !== 'object') return false;
-
-  const credentials = value as Partial<StoredCredentials>;
-
-  return (
-    credentials.version === 1 &&
-    typeof credentials.email === 'string' &&
-    isValidEmail(credentials.email) &&
-    typeof credentials.passwordHash === 'string' &&
-    credentials.passwordHash.length > 0 &&
-    typeof credentials.salt === 'string' &&
-    credentials.salt.length > 0 &&
-    Number.isInteger(credentials.iterations) &&
-    (credentials.iterations ?? 0) > 0
-  );
-}
-
-function readStoredCredentials(): StoredCredentials | undefined {
-  const storage = getCredentialsStorage();
-
-  if (!storage) return undefined;
+export async function initializeAuth(): Promise<void> {
+  clearLegacyAuthentication();
 
   try {
-    const serializedCredentials = storage.getItem(CREDENTIALS_STORAGE_KEY);
+    const response = await fetch(apiUrl('/auth/session'), {
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
 
-    if (!serializedCredentials) return undefined;
-
-    const credentials: unknown = JSON.parse(serializedCredentials);
-
-    if (!isStoredCredentials(credentials)) {
-      console.error('Os dados locais de acesso estão em um formato inválido.');
-      return undefined;
+    if (!response.ok) {
+      throw new Error(`Falha ao consultar sessão: ${response.status}`);
     }
 
-    return credentials;
+    const session = await readJson<SessionResponse>(response);
+    sessionState = {
+      authenticated: session.authenticated,
+      email: session.email ?? DEFAULT_ACCOUNT_EMAIL,
+    };
   } catch (error) {
-    console.error('Não foi possível ler as credenciais locais.', error);
-    return undefined;
-  }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return window.btoa(binary);
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  const binary = window.atob(value);
-  const bytes = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return bytes;
-}
-
-async function derivePasswordHash(
-  password: string,
-  salt: Uint8Array,
-  iterations: number,
-): Promise<string> {
-  const derivedBytes = await pbkdf2Async(
-    sha256,
-    textEncoder.encode(password),
-    salt,
-    {
-      c: iterations,
-      dkLen: 32,
-    },
-  );
-
-  return bytesToBase64(derivedBytes);
-}
-
-async function createStoredCredentials(
-  email: string,
-  password: string,
-): Promise<StoredCredentials> {
-  const salt = window.crypto.getRandomValues(
-    new Uint8Array(SALT_BYTE_LENGTH),
-  );
-  const passwordHash = await derivePasswordHash(
-    password,
-    salt,
-    PASSWORD_HASH_ITERATIONS,
-  );
-
-  return {
-    version: 1,
-    email: normalizeEmail(email),
-    passwordHash,
-    salt: bytesToBase64(salt),
-    iterations: PASSWORD_HASH_ITERATIONS,
-  };
-}
-
-function persistCredentials(credentials: StoredCredentials): void {
-  const storage = getCredentialsStorage();
-
-  if (!storage) {
-    throw new Error('O armazenamento local não está disponível.');
-  }
-
-  storage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(credentials));
-}
-
-async function isPasswordValid(
-  password: string,
-  credentials?: StoredCredentials,
-): Promise<boolean> {
-  if (!credentials) return password === DEFAULT_CREDENTIALS.password;
-
-  const passwordHash = await derivePasswordHash(
-    password,
-    base64ToBytes(credentials.salt),
-    credentials.iterations,
-  );
-
-  if (passwordHash.length !== credentials.passwordHash.length) return false;
-
-  let difference = 0;
-
-  for (let index = 0; index < passwordHash.length; index += 1) {
-    difference |=
-      passwordHash.charCodeAt(index) ^
-      credentials.passwordHash.charCodeAt(index);
-  }
-
-  return difference === 0;
-}
-
-function saveAuthenticatedSession(): boolean {
-  const storage = getSessionStorage();
-
-  if (!storage) return false;
-
-  try {
-    storage.setItem(SESSION_KEY, AUTHENTICATED_VALUE);
-    return true;
-  } catch (error) {
-    console.error('Não foi possível salvar a sessão de acesso.', error);
-    return false;
+    sessionState = {
+      authenticated: false,
+      email: DEFAULT_ACCOUNT_EMAIL,
+    };
+    console.error('Não foi possível consultar a sessão no servidor.', error);
   }
 }
 
 export function getAccountEmail(): string {
-  return readStoredCredentials()?.email ?? DEFAULT_CREDENTIALS.email;
+  return sessionState.email;
 }
 
 export async function login(email: string, password: string): Promise<boolean> {
-  const normalizedEmail = normalizeEmail(email);
-  const storedCredentials = readStoredCredentials();
-  const expectedEmail =
-    storedCredentials?.email ?? DEFAULT_CREDENTIALS.email;
+  const response = await fetch(apiUrl('/auth/login'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
 
-  if (normalizedEmail !== expectedEmail) return false;
+  if (response.status === 401) return false;
+  if (!response.ok) throw new Error(`Falha ao autenticar: ${response.status}`);
 
-  const credentialsAreValid = await isPasswordValid(
-    password,
-    storedCredentials,
-  );
-
-  if (!credentialsAreValid) return false;
-
-  if (!storedCredentials) {
-    try {
-      const initialCredentials = await createStoredCredentials(
-        DEFAULT_CREDENTIALS.email,
-        DEFAULT_CREDENTIALS.password,
-      );
-      persistCredentials(initialCredentials);
-    } catch (error) {
-      console.warn('Não foi possível proteger a credencial inicial.', error);
-    }
-  }
-
-  return saveAuthenticatedSession();
+  const session = await readJson<SessionResponse>(response);
+  sessionState = {
+    authenticated: session.authenticated,
+    email: session.email ?? email.trim().toLowerCase(),
+  };
+  return sessionState.authenticated;
 }
 
 export async function updateCredentials(
   input: UpdateCredentialsInput,
 ): Promise<boolean> {
-  const normalizedEmail = normalizeEmail(input.email);
+  const response = await fetch(apiUrl('/account'), {
+    method: 'PUT',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
 
-  if (!isValidEmail(normalizedEmail)) {
-    throw new TypeError('Informe um e-mail válido.');
+  if (response.status === 403) return false;
+
+  if (!response.ok) {
+    const error: ApiErrorResponse = await readJson<ApiErrorResponse>(
+      response,
+    ).catch(() => ({}));
+
+    if (error.error === 'invalid_email') {
+      throw new TypeError('Informe um e-mail válido.');
+    }
+
+    if (error.error === 'password_too_short') {
+      throw new RangeError('A nova senha deve ter pelo menos 8 caracteres.');
+    }
+
+    if (response.status === 401) sessionState.authenticated = false;
+    throw new Error(`Falha ao atualizar a conta: ${response.status}`);
   }
 
-  if (input.newPassword !== undefined && input.newPassword.length < 8) {
-    throw new RangeError('A nova senha deve ter pelo menos 8 caracteres.');
-  }
-
-  const storedCredentials = readStoredCredentials();
-  const currentPasswordIsValid = await isPasswordValid(
-    input.currentPassword,
-    storedCredentials,
-  );
-
-  if (!currentPasswordIsValid) return false;
-
-  const nextPassword = input.newPassword ?? input.currentPassword;
-  const nextCredentials = await createStoredCredentials(
-    normalizedEmail,
-    nextPassword,
-  );
-  persistCredentials(nextCredentials);
-
-  return true;
+  const account = await readJson<AccountResponse>(response);
+  sessionState.email = account.email;
+  return account.updated;
 }
 
-export function logout(): void {
-  const storage = getSessionStorage();
-
-  if (!storage) return;
-
+export async function logout(): Promise<void> {
   try {
-    storage.removeItem(SESSION_KEY);
+    await fetch(apiUrl('/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    });
   } catch (error) {
-    console.error('Não foi possível encerrar a sessão de acesso.', error);
+    console.error('Não foi possível encerrar a sessão no servidor.', error);
+  } finally {
+    sessionState.authenticated = false;
   }
 }
 
 export function isAuthenticated(): boolean {
-  const storage = getSessionStorage();
-
-  if (!storage) return false;
-
-  try {
-    return storage.getItem(SESSION_KEY) === AUTHENTICATED_VALUE;
-  } catch (error) {
-    console.error('Não foi possível verificar a sessão de acesso.', error);
-    return false;
-  }
+  return sessionState.authenticated;
 }

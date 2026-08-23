@@ -464,7 +464,7 @@ export function renderSettingsPage(container: HTMLElement): void {
 
           <p class="settings-account-note">
             Deixe os campos de nova senha em branco para manter a senha atual.
-            As alterações ficam salvas somente neste navegador.
+            As alterações valem para todos os dispositivos conectados ao sistema.
           </p>
 
           <p

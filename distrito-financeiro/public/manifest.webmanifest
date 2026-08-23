@@ -1,0 +1,10 @@
+{
+  "name": "Distrito Financeiro",
+  "short_name": "Distrito",
+  "description": "Controle financeiro da Barbearia Distrito",
+  "start_url": "/#dashboard",
+  "display": "standalone",
+  "background_color": "#0f1113",
+  "theme_color": "#0f1113",
+  "lang": "pt-BR"
+}

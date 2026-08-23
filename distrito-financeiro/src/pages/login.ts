@@ -1,4 +1,6 @@
 import { login } from '../core/auth';
+import financeIllustrationUrl from '../assets/finance-cuate.svg';
+import districtLogoUrl from '../assets/barbearia-distrito-logo.jpg';
 
 const LOGIN_STYLE_ID = 'login-page-styles';
 
@@ -98,11 +100,25 @@ const loginStyles = `
   }
 
   .login-page__access {
+    position: relative;
     display: grid;
     min-width: 0;
     align-content: center;
     gap: 1.75rem;
     padding: clamp(2rem, 5vw, 3.5rem);
+  }
+
+  .login-page__copyright {
+    position: absolute;
+    right: 1.5rem;
+    bottom: 1.25rem;
+    left: 1.5rem;
+    color: var(--color-text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    opacity: 0.65;
+    text-align: center;
   }
 
   .login-page__header {
@@ -168,6 +184,52 @@ const loginStyles = `
 
   .login-field input:focus-visible {
     outline: 0;
+  }
+
+  .login-password-control {
+    position: relative;
+    display: grid;
+    min-width: 0;
+  }
+
+  .login-password-control input {
+    padding-right: 3.25rem;
+  }
+
+  .login-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.375rem;
+    display: grid;
+    width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0;
+    place-items: center;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transform: translateY(-50%);
+  }
+
+  .login-password-toggle:hover {
+    color: var(--color-text);
+    background: var(--color-surface-muted);
+  }
+
+  .login-password-toggle:active:not(:disabled) {
+    transform: translateY(-50%) scale(0.96);
+  }
+
+  .login-password-toggle svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  .login-password-toggle[aria-pressed="false"] .login-password-icon--hide,
+  .login-password-toggle[aria-pressed="true"] .login-password-icon--show {
+    display: none;
   }
 
   .login-submit {
@@ -259,6 +321,11 @@ const loginStyles = `
       gap: 1.5rem;
       padding: clamp(1.5rem, 7vw, 2rem);
     }
+
+    .login-page__copyright {
+      position: static;
+      margin-top: 0.25rem;
+    }
   }
 
   @media (max-width: 23rem) {
@@ -311,7 +378,7 @@ export function renderLogin(container: HTMLElement): void {
 
         <img
           class="login-page__illustration"
-          src="/src/assets/finance-cuate.svg"
+          src="${financeIllustrationUrl}"
           alt=""
           width="500"
           height="500"
@@ -322,7 +389,7 @@ export function renderLogin(container: HTMLElement): void {
         <header class="login-page__header">
           <img
             class="login-page__logo"
-            src="/src/assets/barbearia-distrito-logo.jpg"
+            src="${districtLogoUrl}"
             alt="Barbearia Distrito"
             width="150"
             height="150"
@@ -340,27 +407,66 @@ export function renderLogin(container: HTMLElement): void {
               type="email"
               autocomplete="username"
               inputmode="email"
-              placeholder="seu@email.com"
+              placeholder="Digite seu email"
               required
             />
           </label>
 
           <label class="login-field" for="login-password">
             Senha
-            <input
-              id="login-password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Digite sua senha"
-              required
-            />
+            <span class="login-password-control">
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Digite sua senha"
+                required
+              />
+              <button
+                class="login-password-toggle"
+                type="button"
+                aria-label="Mostrar senha"
+                aria-pressed="false"
+              >
+                <svg
+                  class="login-password-icon--show"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <svg
+                  class="login-password-icon--hide"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m3 3 18 18" />
+                  <path d="M10.6 5.2A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a16 16 0 0 1-2.1 3.1" />
+                  <path d="M6.6 6.7C3.6 8.7 2 12 2 12s3.5 7 10 7a9.8 9.8 0 0 0 4.1-.9" />
+                  <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                </svg>
+              </button>
+            </span>
           </label>
 
           <p class="login-error" role="alert" hidden></p>
 
           <button class="login-submit" type="submit">Entrar no sistema</button>
         </form>
+
+        <p class="login-page__copyright">Distrito Barbearia © 2026</p>
       </div>
 
       </section>
@@ -377,6 +483,10 @@ export function renderLogin(container: HTMLElement): void {
     container,
     '#login-password',
   );
+  const passwordToggle = getRequiredElement<HTMLButtonElement>(
+    container,
+    '.login-password-toggle',
+  );
   const errorMessage = getRequiredElement<HTMLElement>(
     container,
     '.login-error',
@@ -385,6 +495,17 @@ export function renderLogin(container: HTMLElement): void {
     container,
     '.login-submit',
   );
+
+  passwordToggle.addEventListener('click', () => {
+    const passwordIsVisible = passwordInput.type === 'text';
+    passwordInput.type = passwordIsVisible ? 'password' : 'text';
+    passwordToggle.setAttribute('aria-pressed', String(!passwordIsVisible));
+    passwordToggle.setAttribute(
+      'aria-label',
+      passwordIsVisible ? 'Mostrar senha' : 'Ocultar senha',
+    );
+    passwordInput.focus({ preventScroll: true });
+  });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();

@@ -1,7 +1,8 @@
-import { isAuthenticated, logout } from './core/auth';
+import { initializeAuth, isAuthenticated, logout } from './core/auth';
 import { initDB } from './core/database';
 import { initializeTheme } from './core/theme';
 import { showConfirmDialog } from './components/confirm-dialog';
+import { initializeFormValidation } from './components/form-validation';
 import { renderCatalogPage } from './pages/catalog';
 import { renderDashboard } from './pages/dashboard';
 import { renderEntries } from './pages/entries';
@@ -11,6 +12,7 @@ import { renderSettingsPage } from './pages/settings';
 import './styles/layout.css';
 
 initializeTheme();
+initializeFormValidation();
 
 const ROUTES = {
   login: {
@@ -156,7 +158,7 @@ function initializeRouter(): void {
 
     if (!confirmed) return;
 
-    logout();
+    await logout();
     window.location.hash = '#login';
   });
 
@@ -185,9 +187,10 @@ async function initializeDatabase(): Promise<void> {
   }
 }
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
+  await initializeAuth();
   initializeRouter();
   void initializeDatabase();
 }
 
-bootstrap();
+void bootstrap();
