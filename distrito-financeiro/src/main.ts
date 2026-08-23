@@ -118,7 +118,7 @@ function renderRoute(requestedRoute: RouteName, moveFocus = false): void {
     }
   }
 
-  document.title = `${ROUTES[route].navigationLabel} | Distrito Financeiro`;
+  document.title = ROUTES[route].navigationLabel;
 
   if (moveFocus) {
     appContent.focus({ preventScroll: true });

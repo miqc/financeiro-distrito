@@ -14,36 +14,107 @@ const loginStyles = `
     width: 100%;
     min-height: 100vh;
     min-height: 100dvh;
-    padding: clamp(1rem, 5vw, 2rem);
+    padding: clamp(1rem, 4vw, 2rem);
     place-items: center;
   }
 
   .login-page {
     display: grid;
-    width: min(100%, 27rem);
-    gap: 1.5rem;
-    padding: clamp(1.5rem, 6vw, 2.25rem);
+    grid-template-columns: minmax(0, 1.08fr) minmax(22rem, 0.92fr);
+    width: min(100%, 68rem);
+    min-height: min(42rem, calc(100dvh - 4rem));
+    overflow: hidden;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-medium);
-    box-shadow: var(--shadow-surface);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-dialog);
+  }
+
+  .login-screen {
+    display: grid;
+    width: min(100%, 68rem);
+    justify-items: center;
   }
 
   .login-page [hidden] {
     display: none !important;
   }
 
+  .login-page__credit {
+    position: fixed;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    left: 50%;
+    z-index: 2;
+    color: var(--color-text-muted);
+    font-size: 0.625rem;
+    letter-spacing: 0.03em;
+    opacity: 0.7;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  .login-page__visual {
+    display: grid;
+    min-width: 0;
+    align-content: space-between;
+    gap: 1.5rem;
+    padding: clamp(2rem, 5vw, 3.5rem);
+    overflow: hidden;
+    background: var(--color-background);
+    border-right: 1px solid var(--color-border);
+  }
+
+  .login-page__visual-copy {
+    display: grid;
+    max-width: 28rem;
+    gap: 0.625rem;
+  }
+
+  .login-page__eyebrow {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .login-page__visual-copy h2 {
+    font-size: clamp(1.75rem, 4vw, 2.75rem);
+    letter-spacing: -0.04em;
+    line-height: 1.08;
+  }
+
+  .login-page__visual-copy p:last-child {
+    color: var(--color-text-muted);
+    font-size: 0.9375rem;
+  }
+
+  .login-page__illustration {
+    display: block;
+    width: min(100%, 29rem);
+    max-height: 27rem;
+    justify-self: center;
+    object-fit: contain;
+  }
+
+  .login-page__access {
+    display: grid;
+    min-width: 0;
+    align-content: center;
+    gap: 1.75rem;
+    padding: clamp(2rem, 5vw, 3.5rem);
+  }
+
   .login-page__header {
     display: grid;
-    justify-items: center;
-    gap: 0.5rem;
-    text-align: center;
+    justify-items: start;
+    gap: 0.625rem;
   }
 
   .login-page__logo {
-    width: 5rem;
-    height: 5rem;
-    margin-bottom: 0.25rem;
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: 0.5rem;
     object-fit: cover;
     background: #090909;
     border: 1px solid var(--color-border);
@@ -54,7 +125,8 @@ const loginStyles = `
   }
 
   .login-page__header h1 {
-    font-size: clamp(1.5rem, 6vw, 2rem);
+    font-size: clamp(1.625rem, 4vw, 2rem);
+    letter-spacing: -0.025em;
     line-height: 1.2;
   }
 
@@ -79,8 +151,8 @@ const loginStyles = `
     width: 100%;
     min-height: 3rem;
     padding: 0.6875rem 0.875rem;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    background: var(--color-background);
+    border: 1px solid var(--color-input-border);
     border-radius: var(--radius-small);
   }
 
@@ -91,6 +163,11 @@ const loginStyles = `
   .login-field input:focus {
     border-color: var(--color-primary-strong);
     box-shadow: 0 0 0 0.1875rem var(--color-primary-soft);
+    outline: 0;
+  }
+
+  .login-field input:focus-visible {
+    outline: 0;
   }
 
   .login-submit {
@@ -133,6 +210,68 @@ const loginStyles = `
       transform: translateY(-0.0625rem);
     }
   }
+
+  @media (max-width: 48rem) {
+    body.auth-screen .app-content {
+      align-items: start;
+    }
+
+    .login-page {
+      grid-template-columns: minmax(0, 1fr);
+      width: min(100%, 31rem);
+      min-height: 0;
+    }
+
+    .login-screen {
+      width: min(100%, 31rem);
+      gap: 0.625rem;
+    }
+
+    .login-page__credit {
+      position: static;
+      padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+      transform: none;
+    }
+
+    .login-page__visual {
+      grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.6fr);
+      align-items: center;
+      gap: 1rem;
+      padding: 1.5rem;
+      border-right: 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .login-page__visual-copy h2 {
+      font-size: clamp(1.375rem, 7vw, 1.75rem);
+    }
+
+    .login-page__visual-copy p:last-child {
+      display: none;
+    }
+
+    .login-page__illustration {
+      width: 9rem;
+      max-height: 9rem;
+    }
+
+    .login-page__access {
+      gap: 1.5rem;
+      padding: clamp(1.5rem, 7vw, 2rem);
+    }
+  }
+
+  @media (max-width: 23rem) {
+    .login-page__visual {
+      grid-template-columns: minmax(0, 1fr) 6.5rem;
+      padding: 1.25rem;
+    }
+
+    .login-page__illustration {
+      width: 6.5rem;
+      max-height: 6.5rem;
+    }
+  }
 `;
 
 function ensureLoginStyles(): void {
@@ -161,48 +300,72 @@ export function renderLogin(container: HTMLElement): void {
   ensureLoginStyles();
 
   container.innerHTML = `
-    <section class="login-page" aria-labelledby="login-title">
-      <header class="login-page__header">
+    <div class="login-screen">
+      <section class="login-page" aria-labelledby="login-title">
+      <div class="login-page__visual" aria-hidden="true">
+        <div class="login-page__visual-copy">
+          <p class="login-page__eyebrow">Distrito Financeiro</p>
+          <h2>Painel de Finanças do Distrito</h2>
+          <p>Acompanhe atendimentos, despesas e resultados em um só lugar.</p>
+        </div>
+
         <img
-          class="login-page__logo"
-          src="/src/assets/barbearia-distrito-logo.jpg"
-          alt="Barbearia Distrito"
-          width="150"
-          height="150"
+          class="login-page__illustration"
+          src="/src/assets/finance-cuate.svg"
+          alt=""
+          width="500"
+          height="500"
         />
-        <h1 id="login-title">Acessar o Distrito</h1>
-        <p>Entre para acessar o controle financeiro.</p>
-      </header>
+      </div>
 
-      <form class="login-form">
-        <label class="login-field" for="login-email">
-          E-mail
-          <input
-            id="login-email"
-            name="email"
-            type="email"
-            autocomplete="username"
-            inputmode="email"
-            required
+      <div class="login-page__access">
+        <header class="login-page__header">
+          <img
+            class="login-page__logo"
+            src="/src/assets/barbearia-distrito-logo.jpg"
+            alt="Barbearia Distrito"
+            width="150"
+            height="150"
           />
-        </label>
+          <h1 id="login-title">Bem-vindo de volta!</h1>
+          <p>Entre com seus dados para acessar o painel.</p>
+        </header>
 
-        <label class="login-field" for="login-password">
-          Senha
-          <input
-            id="login-password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
-        </label>
+        <form class="login-form">
+          <label class="login-field" for="login-email">
+            E-mail
+            <input
+              id="login-email"
+              name="email"
+              type="email"
+              autocomplete="username"
+              inputmode="email"
+              placeholder="seu@email.com"
+              required
+            />
+          </label>
 
-        <p class="login-error" role="alert" hidden></p>
+          <label class="login-field" for="login-password">
+            Senha
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Digite sua senha"
+              required
+            />
+          </label>
 
-        <button class="login-submit" type="submit">Entrar</button>
-      </form>
-    </section>
+          <p class="login-error" role="alert" hidden></p>
+
+          <button class="login-submit" type="submit">Entrar no sistema</button>
+        </form>
+      </div>
+
+      </section>
+
+    </div>
   `;
 
   const form = getRequiredElement<HTMLFormElement>(container, '.login-form');

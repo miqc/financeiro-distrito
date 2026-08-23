@@ -98,7 +98,7 @@
   --color-warning: #c99435;
   --color-warning-strong: #efc56f;
   --color-warning-soft: #392d16;
-  --color-focus: #8ebfff;
+  --color-focus: #8b9298;
   --color-action: #f1f1ef;
   --color-action-hover: #ffffff;
   --color-on-action: #111315;
@@ -237,8 +237,7 @@ svg {
 }
 
 :focus-visible {
-  outline: 0.1875rem solid var(--color-focus);
-  outline-offset: 0.1875rem;
+  outline: 0;
 }
 
 .app-navigation[hidden] {
