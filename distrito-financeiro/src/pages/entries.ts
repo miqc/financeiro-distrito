@@ -396,8 +396,8 @@ const entriesStyles = `
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     color: var(--color-text);
-    background: var(--color-success-soft);
-    border: 1px solid var(--color-soft-border);
+    background: var(--color-background);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-small);
     cursor: pointer;
     font-size: 0.875rem;
@@ -1184,7 +1184,7 @@ export async function renderEntries(container: HTMLElement): Promise<void> {
                 type="checkbox"
                 aria-controls="sales-product-fields"
               />
-              Cliente comprou um ou mais produtos
+              Consta venda de produto
             </label>
 
             <fieldset

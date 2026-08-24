@@ -1,4 +1,5 @@
 import { login } from '../core/auth';
+import { initializeDataStore } from '../core/database/operations';
 import financeIllustrationUrl from '../assets/finance-cuate.svg';
 import districtLogoUrl from '../assets/barbearia-distrito-logo.jpg';
 
@@ -522,6 +523,15 @@ export function renderLogin(container: HTMLElement): void {
       );
 
       if (authenticated) {
+        try {
+          await initializeDataStore();
+        } catch (error) {
+          console.error(
+            'Não foi possível migrar os dados locais para o servidor.',
+            error,
+          );
+        }
+
         window.location.hash = '#dashboard';
         return;
       }

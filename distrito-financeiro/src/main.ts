@@ -1,5 +1,5 @@
 import { initializeAuth, isAuthenticated, logout } from './core/auth';
-import { initDB } from './core/database';
+import { initializeDataStore } from './core/database/operations';
 import { initializeTheme } from './core/theme';
 import { showConfirmDialog } from './components/confirm-dialog';
 import { initializeFormValidation } from './components/form-validation';
@@ -177,11 +177,10 @@ function initializeRouter(): void {
 
 async function initializeDatabase(): Promise<void> {
   try {
-    const database = await initDB();
-    database.close();
+    await initializeDataStore();
   } catch (error) {
     console.error(
-      'Não foi possível iniciar o banco de dados local. Verifique as permissões do navegador.',
+      'Não foi possível preparar os dados no banco central.',
       error,
     );
   }
@@ -189,8 +188,20 @@ async function initializeDatabase(): Promise<void> {
 
 async function bootstrap(): Promise<void> {
   await initializeAuth();
+  if (isAuthenticated()) await initializeDatabase();
   initializeRouter();
-  void initializeDatabase();
 }
+
+let authenticationRedirectInProgress = false;
+
+window.addEventListener('distrito:authentication-required', () => {
+  if (authenticationRedirectInProgress) return;
+  authenticationRedirectInProgress = true;
+
+  void logout().finally(() => {
+    window.location.hash = '#login';
+    authenticationRedirectInProgress = false;
+  });
+});
 
 void bootstrap();

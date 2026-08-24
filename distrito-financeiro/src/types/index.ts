@@ -1,4 +1,4 @@
-/** Identificador persistido como chave primária no IndexedDB. */
+/** Identificador persistido como chave primária no banco central. */
 export type EntityId = string;
 
 /** Data civil no formato YYYY-MM-DD. */

@@ -9,8 +9,11 @@
     "dev:api": "node --env-file-if-exists=.env --watch server/index.mjs",
     "dev:web": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run build",
     "preview": "vite preview",
-    "start": "node --env-file-if-exists=.env server/index.mjs"
+    "start": "node --env-file-if-exists=.env server/index.mjs",
+    "db:reset-admin": "node --env-file-if-exists=.env server/reset-admin-password.mjs"
   },
   "keywords": [],
   "author": "",

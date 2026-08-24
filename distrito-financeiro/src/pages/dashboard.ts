@@ -4,7 +4,6 @@ import {
 } from '../core/calculations';
 import {
   addMonthlyConfig,
-  deleteMonthlyConfig,
   getConfigByReferenceMonth,
   listExpensesByMonth,
   listProductsByMonth,
@@ -645,26 +644,11 @@ async function saveMonthlyConfig(
     return currentConfig;
   }
 
-  await deleteMonthlyConfig(currentConfig.id);
-
-  try {
-    return await addMonthlyConfig({
-      id: currentConfig.id,
-      referenceMonth,
-      workingDays,
-    });
-  } catch (error) {
-    try {
-      await addMonthlyConfig(currentConfig);
-    } catch (rollbackError) {
-      console.error(
-        'Não foi possível restaurar a configuração mensal anterior.',
-        rollbackError,
-      );
-    }
-
-    throw error;
-  }
+  return addMonthlyConfig({
+    id: currentConfig.id,
+    referenceMonth,
+    workingDays,
+  });
 }
 
 function getRequiredElement<T extends Element>(
