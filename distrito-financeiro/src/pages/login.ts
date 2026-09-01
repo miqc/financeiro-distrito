@@ -373,7 +373,7 @@ export function renderLogin(container: HTMLElement): void {
       <div class="login-page__visual" aria-hidden="true">
         <div class="login-page__visual-copy">
           <p class="login-page__eyebrow">Distrito Financeiro</p>
-          <h2>Painel de Finanças do Distrito</h2>
+          <h2>Painel do Distrito</h2>
           <p>Acompanhe atendimentos, despesas e resultados em um só lugar.</p>
         </div>
 
