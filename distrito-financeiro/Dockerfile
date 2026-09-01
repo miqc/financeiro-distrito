@@ -14,7 +14,6 @@ ENV PORT=8787
 ENV DATABASE_PATH=/app/data/distrito.sqlite
 ENV COOKIE_SECURE=true
 
-VOLUME ["/app/data"]
 EXPOSE 8787
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
