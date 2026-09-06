@@ -44,6 +44,13 @@ const dataStores = new Set([
 ]);
 const paymentMethods = new Set(['cash', 'card', 'pix']);
 const catalogTypes = new Set(['service', 'product']);
+const userRoles = new Set(['admin', 'barber', 'client']);
+const rolePermissions = {
+  owner: new Set(['finance.read', 'finance.write', 'users.manage']),
+  admin: new Set(['finance.read', 'finance.write', 'users.manage']),
+  barber: new Set(),
+  client: new Set(),
+};
 
 const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
@@ -83,6 +90,10 @@ database.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    first_name TEXT NOT NULL DEFAULT '',
+    last_name TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    profile_photo TEXT NOT NULL DEFAULT '',
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
     password_salt TEXT NOT NULL,
@@ -112,6 +123,25 @@ database.exec(`
   CREATE INDEX IF NOT EXISTS auth_sessions_by_expiration
   ON auth_sessions (expires_at);
 `);
+
+function ensureUserNameColumns() {
+  const columns = database.prepare('PRAGMA table_info(users)').all();
+  const columnNames = new Set(columns.map((column) => column.name));
+  if (!columnNames.has('first_name')) {
+    database.exec("ALTER TABLE users ADD COLUMN first_name TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has('last_name')) {
+    database.exec("ALTER TABLE users ADD COLUMN last_name TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has('phone')) {
+    database.exec("ALTER TABLE users ADD COLUMN phone TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columnNames.has('profile_photo')) {
+    database.exec("ALTER TABLE users ADD COLUMN profile_photo TEXT NOT NULL DEFAULT ''");
+  }
+}
+
+ensureUserNameColumns();
 
 function applyDatabaseMigrations() {
   database.exec(`
@@ -308,14 +338,24 @@ function seedOwnerUser() {
     .prepare('SELECT id FROM users WHERE id = 1')
     .get();
 
-  if (existingUser) return;
+  if (existingUser) {
+    database
+      .prepare(`
+        UPDATE users
+        SET first_name = CASE WHEN first_name = '' THEN 'Proprietário' ELSE first_name END,
+            last_name = COALESCE(last_name, '')
+        WHERE id = 1
+      `)
+      .run();
+    return;
+  }
 
   database
     .prepare(`
       INSERT INTO users (
-        id, name, email, password_hash, password_salt, role, status,
+        id, name, first_name, last_name, email, password_hash, password_salt, role, status,
         created_at, updated_at
-      ) VALUES (1, 'Proprietário', ?, ?, ?, 'owner', 'active', ?, ?)
+      ) VALUES (1, 'Proprietário', 'Proprietário', '', ?, ?, ?, 'owner', 'active', ?, ?)
     `)
     .run(
       adminAccount.email,
@@ -365,6 +405,10 @@ function getAuthenticatedSession(request) {
         users.id AS user_id,
         users.id AS account_id,
         users.name,
+        users.first_name,
+        users.last_name,
+        users.phone,
+        users.profile_photo,
         users.email,
         users.role,
         users.status,
@@ -519,6 +563,104 @@ function requestError(statusCode, errorCode) {
   error.statusCode = statusCode;
   error.errorCode = errorCode;
   return error;
+}
+
+function hasPermission(session, permission) {
+  return rolePermissions[session.role]?.has(permission) ?? false;
+}
+
+function requirePermission(response, session, permission) {
+  if (hasPermission(session, permission)) return true;
+
+  sendJson(response, 403, { error: 'permission_denied' });
+  return false;
+}
+
+function serializeUser(user) {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.name;
+  return {
+    id: user.id,
+    name,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    phone: user.phone,
+    profilePhoto: user.profile_photo,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    createdAt: user.created_at,
+  };
+}
+
+function parseUserInput(body, { requiredPassword = false } = {}) {
+  const firstName = String(body.firstName ?? body.name ?? '').trim();
+  const lastName = String(body.lastName ?? '').trim();
+  const name = [firstName, lastName].filter(Boolean).join(' ');
+  const email = normalizeEmail(body.email);
+  const role = String(body.role ?? 'client');
+  const password = body.password === undefined ? undefined : String(body.password);
+
+  if (
+    firstName.length < 2 || firstName.length > 80 ||
+    lastName.length < 2 || lastName.length > 80
+  ) {
+    throw requestError(400, 'invalid_name');
+  }
+  if (!isValidEmail(email)) throw requestError(400, 'invalid_email');
+  if (!userRoles.has(role)) throw requestError(400, 'invalid_role');
+  if (requiredPassword && (password === undefined || password.length < 8)) {
+    throw requestError(400, 'password_too_short');
+  }
+
+  return { name, firstName, lastName, email, role, password };
+}
+
+function listUsers() {
+  return database
+    .prepare(`
+      SELECT id, name, first_name, last_name, phone, profile_photo, email, role, status, created_at
+      FROM users
+      ORDER BY name COLLATE NOCASE, id
+    `)
+    .all()
+    .map(serializeUser);
+}
+
+function createUser(body) {
+  const input = parseUserInput(body, { requiredPassword: true });
+  const credentials = hashPassword(input.password);
+  const now = Date.now();
+
+  try {
+    const result = database
+      .prepare(`
+        INSERT INTO users (
+          name, first_name, last_name, phone, profile_photo, email, password_hash, password_salt, role, status,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+      `)
+      .run(
+        input.name,
+        input.firstName,
+        input.lastName,
+        '',
+        '',
+        input.email,
+        credentials.hash,
+        credentials.salt,
+        input.role,
+        now,
+        now,
+      );
+    return database
+      .prepare('SELECT id, name, first_name, last_name, phone, profile_photo, email, role, status, created_at FROM users WHERE id = ?')
+      .get(result.lastInsertRowid);
+  } catch (error) {
+    if (String(error?.message ?? '').includes('UNIQUE')) {
+      throw requestError(409, 'email_already_exists');
+    }
+    throw error;
+  }
 }
 
 function isObject(value) {
@@ -1488,8 +1630,12 @@ async function handleApiRequest(request, response, url) {
       authenticated: Boolean(session),
       user: session
         ? {
-            id: session.user_id,
-            name: session.name,
+          id: session.user_id,
+            name: [session.first_name, session.last_name].filter(Boolean).join(' ') || session.name,
+            firstName: session.first_name,
+            lastName: session.last_name,
+            phone: session.phone,
+            profilePhoto: session.profile_photo,
             email: session.email,
             role: session.role,
           }
@@ -1527,12 +1673,22 @@ async function handleApiRequest(request, response, url) {
         user: {
           id: account.id,
           name: account.name,
+          firstName: account.first_name,
+          lastName: account.last_name,
+          phone: account.phone,
+          profilePhoto: account.profile_photo,
           email: account.email,
           role: account.role,
         },
       },
       { 'Set-Cookie': sessionCookie(token) },
     );
+    return;
+  }
+
+  if (request.method === 'POST' && pathname === '/api/auth/register') {
+    const user = createUser({ ...(await readJson(request)), role: 'client' });
+    sendJson(response, 201, { user: serializeUser(user) });
     return;
   }
 
@@ -1561,6 +1717,10 @@ async function handleApiRequest(request, response, url) {
     }
 
     const body = await readJson(request);
+    const firstName = String(body.firstName ?? '').trim();
+    const lastName = String(body.lastName ?? '').trim();
+    const phone = String(body.phone ?? '').trim();
+    const profilePhoto = String(body.profilePhoto ?? '');
     const email = normalizeEmail(body.email);
     const currentPassword = String(body.currentPassword ?? '');
     const newPassword =
@@ -1571,12 +1731,28 @@ async function handleApiRequest(request, response, url) {
       return;
     }
 
+    if (firstName.length < 2 || firstName.length > 80 || lastName.length < 2 || lastName.length > 80) {
+      sendJson(response, 400, { error: 'invalid_name' });
+      return;
+    }
+    if (
+      phone.length > 30 ||
+      profilePhoto.length > 2_000_000 ||
+      (profilePhoto && !/^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(profilePhoto))
+    ) {
+      sendJson(response, 400, { error: 'invalid_profile' });
+      return;
+    }
+
     if (newPassword !== undefined && newPassword.length < 8) {
       sendJson(response, 400, { error: 'password_too_short' });
       return;
     }
 
-    if (!verifyPassword(currentPassword, session)) {
+    const requiresCurrentPassword =
+      email !== session.email || newPassword !== undefined;
+
+    if (requiresCurrentPassword && !verifyPassword(currentPassword, session)) {
       sendJson(response, 403, { error: 'invalid_current_password' });
       return;
     }
@@ -1607,10 +1783,22 @@ async function handleApiRequest(request, response, url) {
     database
       .prepare(`
         UPDATE users
-        SET email = ?, password_hash = ?, password_salt = ?, updated_at = ?
+        SET name = ?, first_name = ?, last_name = ?, phone = ?, profile_photo = ?, email = ?,
+            password_hash = ?, password_salt = ?, updated_at = ?
         WHERE id = ?
       `)
-      .run(email, passwordHash, passwordSalt, Date.now(), session.user_id);
+      .run(
+        `${firstName} ${lastName}`,
+        firstName,
+        lastName,
+        phone,
+        profilePhoto,
+        email,
+        passwordHash,
+        passwordSalt,
+        Date.now(),
+        session.user_id,
+      );
 
     database
       .prepare(`
@@ -1619,7 +1807,69 @@ async function handleApiRequest(request, response, url) {
       `)
       .run(session.user_id, session.token_hash);
 
-    sendJson(response, 200, { updated: true, email });
+    sendJson(response, 200, {
+      updated: true,
+      firstName,
+      lastName,
+      phone,
+      profilePhoto,
+      email,
+    });
+    return;
+  }
+
+  if (pathname === '/api/users' || /^\/api\/users\/\d+$/.test(pathname)) {
+    const session = getAuthenticatedSession(request);
+    if (!session) {
+      sendJson(response, 401, { error: 'authentication_required' });
+      return;
+    }
+    if (!requirePermission(response, session, 'users.manage')) return;
+
+    if (request.method === 'GET' && pathname === '/api/users') {
+      sendJson(response, 200, { users: listUsers() });
+      return;
+    }
+
+    if (request.method === 'POST' && pathname === '/api/users') {
+      const user = createUser(await readJson(request));
+      sendJson(response, 201, { user: serializeUser(user) });
+      return;
+    }
+
+    const userId = Number(pathname.split('/').pop());
+    if (request.method === 'PUT') {
+      const body = await readJson(request);
+      const status = String(body.status ?? '');
+      const role = String(body.role ?? '');
+
+      if (userId === session.user_id) {
+        sendJson(response, 400, { error: 'cannot_change_own_access' });
+        return;
+      }
+      if (!['active', 'inactive'].includes(status) || !userRoles.has(role)) {
+        sendJson(response, 400, { error: 'invalid_user_update' });
+        return;
+      }
+
+      const result = database
+        .prepare(`
+          UPDATE users SET role = ?, status = ?, updated_at = ?
+          WHERE id = ?
+        `)
+        .run(role, status, Date.now(), userId);
+      if (result.changes !== 1) {
+        sendJson(response, 404, { error: 'user_not_found' });
+        return;
+      }
+      const user = database
+        .prepare('SELECT id, name, first_name, last_name, phone, profile_photo, email, role, status, created_at FROM users WHERE id = ?')
+        .get(userId);
+      sendJson(response, 200, { user: serializeUser(user) });
+      return;
+    }
+
+    sendMethodNotAllowed(response, pathname === '/api/users' ? ['GET', 'POST'] : ['PUT']);
     return;
   }
 
@@ -1632,6 +1882,12 @@ async function handleApiRequest(request, response, url) {
       sendJson(response, 401, { error: 'authentication_required' });
       return;
     }
+
+    const isReadRequest = request.method === 'GET';
+    const requiredPermission = isReadRequest
+      ? 'finance.read'
+      : 'finance.write';
+    if (!requirePermission(response, session, requiredPermission)) return;
 
     await handleDataRequest(request, response, url, session);
     return;

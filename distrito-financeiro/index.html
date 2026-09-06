@@ -41,6 +41,10 @@
   </head>
   <body>
     <div class="app-shell">
+      <button class="mobile-nav-toggle" type="button" data-action="toggle-mobile-navigation" aria-label="Abrir navegação" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+      </button>
+      <button class="mobile-nav-backdrop" type="button" data-action="close-mobile-navigation" aria-label="Fechar navegação" hidden></button>
       <aside class="app-navigation" aria-label="Navegação principal">
         <a class="app-brand" href="#dashboard" aria-label="Barbearia Distrito — ir para o resumo">
           <img
@@ -189,11 +193,7 @@
             </svg>
             <span>Ajustes</span>
           </a>
-          <button
-            class="navigation-link navigation-link--logout"
-            type="button"
-            data-action="logout"
-          >
+          <a class="navigation-link" href="#users" data-route="users">
             <svg
               class="navigation-link__icon"
               width="22"
@@ -207,12 +207,31 @@
               aria-hidden="true"
               focusable="false"
             >
-              <path d="M10 17l5-5-5-5" />
-              <path d="M15 12H3" />
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <path d="M20 21a8 8 0 0 0-16 0" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
-            <span>Sair</span>
-          </button>
+            <span>Usuários</span>
+          </a>
+          <div class="sidebar-profile">
+            <button
+              class="sidebar-profile__trigger"
+              type="button"
+              data-action="profile-menu"
+              aria-label="Abrir opções da conta"
+              aria-expanded="false"
+              aria-controls="profile-menu-options"
+            >
+            <span class="sidebar-profile__avatar" data-user-avatar aria-hidden="true">U</span>
+            <span class="sidebar-profile__copy">
+              <strong data-user-name>Usuário</strong>
+              <small data-user-email>email</small>
+            </span>
+            </button>
+            <div id="profile-menu-options" class="sidebar-profile__menu" hidden>
+              <button type="button" data-action="open-profile">Meu perfil</button>
+              <button type="button" data-action="logout">Sair</button>
+            </div>
+          </div>
         </nav>
       </aside>
 

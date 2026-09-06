@@ -1,4 +1,4 @@
-import { login } from '../core/auth';
+import { login, register } from '../core/auth';
 import { initializeDataStore } from '../core/database/operations';
 import financeIllustrationUrl from '../assets/finance-cuate.svg';
 import districtLogoUrl from '../assets/barbearia-distrito-logo.jpg';
@@ -268,6 +268,12 @@ const loginStyles = `
       var(--motion-ease-emphasized) backwards;
   }
 
+  .login-error--success {
+    color: var(--color-success-strong);
+    background: var(--color-success-soft);
+    border-color: var(--color-success);
+  }
+
   @media (hover: hover) and (pointer: fine) {
     .login-submit:hover:not(:disabled) {
       transform: translateY(-0.0625rem);
@@ -467,6 +473,25 @@ export function renderLogin(container: HTMLElement): void {
           <button class="login-submit" type="submit">Entrar no sistema</button>
         </form>
 
+        <button class="login-signup-link" type="button">Ainda não tenho uma conta</button>
+        <form class="login-form login-register-form" hidden>
+          <label class="login-field" for="register-first-name">Nome
+            <input id="register-first-name" name="firstName" autocomplete="given-name" required minlength="2" placeholder="Digite seu nome" />
+          </label>
+          <label class="login-field" for="register-last-name">Sobrenome
+            <input id="register-last-name" name="lastName" autocomplete="family-name" required minlength="2" placeholder="Digite seu sobrenome" />
+          </label>
+          <label class="login-field" for="register-email">E-mail
+            <input id="register-email" name="email" type="email" autocomplete="email" required placeholder="Digite seu email" />
+          </label>
+          <label class="login-field" for="register-password">Senha
+            <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="8" required placeholder="Mínimo de 8 caracteres" />
+          </label>
+          <p class="login-register-feedback" role="alert" hidden></p>
+          <button class="login-submit" type="submit">Criar minha conta</button>
+        </form>
+        <button class="login-signin-link" type="button" hidden>Já tenho uma conta</button>
+
         <p class="login-page__copyright">Distrito Barbearia © 2026</p>
       </div>
 
@@ -496,6 +521,50 @@ export function renderLogin(container: HTMLElement): void {
     container,
     '.login-submit',
   );
+  const signupLink = getRequiredElement<HTMLButtonElement>(container, '.login-signup-link');
+  const signinLink = getRequiredElement<HTMLButtonElement>(container, '.login-signin-link');
+  const registerForm = getRequiredElement<HTMLFormElement>(container, '.login-register-form');
+  const registerFeedback = getRequiredElement<HTMLElement>(container, '.login-register-feedback');
+
+  const showRegister = (isRegistering: boolean): void => {
+    form.hidden = isRegistering;
+    registerForm.hidden = !isRegistering;
+    signupLink.hidden = isRegistering;
+    signinLink.hidden = !isRegistering;
+    errorMessage.hidden = true;
+    errorMessage.classList.remove('login-error--success');
+    (isRegistering ? registerForm : form).querySelector<HTMLInputElement>('input')?.focus();
+  };
+
+  signupLink.addEventListener('click', () => showRegister(true));
+  signinLink.addEventListener('click', () => showRegister(false));
+
+  registerForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!registerForm.reportValidity()) return;
+    const data = new FormData(registerForm);
+    const button = registerForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (button) button.disabled = true;
+    registerFeedback.hidden = true;
+    try {
+      await register({
+        firstName: String(data.get('firstName') ?? ''),
+        lastName: String(data.get('lastName') ?? ''),
+        email: String(data.get('email') ?? ''),
+        password: String(data.get('password') ?? ''),
+      });
+      registerForm.reset();
+      showRegister(false);
+      errorMessage.textContent = 'Conta criada. Agora entre com seu e-mail e senha.';
+      errorMessage.classList.add('login-error--success');
+      errorMessage.hidden = false;
+    } catch (error) {
+      registerFeedback.textContent = error instanceof Error ? error.message : 'Não foi possível criar sua conta.';
+      registerFeedback.hidden = false;
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
 
   passwordToggle.addEventListener('click', () => {
     const passwordIsVisible = passwordInput.type === 'text';
@@ -515,6 +584,7 @@ export function renderLogin(container: HTMLElement): void {
 
     submitButton.disabled = true;
     errorMessage.hidden = true;
+    errorMessage.classList.remove('login-error--success');
 
     try {
       const authenticated = await login(

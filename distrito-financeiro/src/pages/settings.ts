@@ -1,4 +1,4 @@
-import { getAccountEmail, updateCredentials } from '../core/auth';
+import { getAccountEmail, getAccountName, getAccountProfile, updateCredentials } from '../core/auth';
 import { getTheme, setTheme } from '../core/theme';
 
 const SETTINGS_STYLE_ID = 'settings-page-styles';
@@ -7,6 +7,10 @@ const settingsStyles = `
   .settings-page {
     display: grid;
     gap: clamp(1rem, 3vw, 1.5rem);
+  }
+
+  .settings-page > [aria-labelledby="account-title"] {
+    display: none;
   }
 
   .settings-page [hidden] {
@@ -336,7 +340,7 @@ const settingsStyles = `
   }
 `;
 
-function ensureSettingsStyles(): void {
+export function ensureSettingsStyles(): void {
   if (document.querySelector(`#${SETTINGS_STYLE_ID}`)) return;
 
   const style = document.createElement('style');
@@ -415,6 +419,26 @@ export function renderSettingsPage(container: HTMLElement): void {
 
         <form class="settings-account-form">
           <div class="settings-account-fields">
+            <label class="settings-field" for="settings-account-first-name">
+              Nome
+              <input id="settings-account-first-name" name="first-name" autocomplete="given-name" required />
+            </label>
+
+            <label class="settings-field" for="settings-account-last-name">
+              Sobrenome
+              <input id="settings-account-last-name" name="last-name" autocomplete="family-name" required />
+            </label>
+
+            <label class="settings-field" for="settings-account-phone">
+              Telefone
+              <input id="settings-account-phone" name="phone" type="tel" autocomplete="tel" maxlength="30" placeholder="(00) 00000-0000" />
+            </label>
+
+            <label class="settings-field" for="settings-account-photo">
+              Foto de perfil
+              <input id="settings-account-photo" name="photo" type="file" accept="image/*" />
+            </label>
+
             <label class="settings-field" for="settings-account-email">
               E-mail de acesso
               <input
@@ -504,6 +528,16 @@ export function renderSettingsPage(container: HTMLElement): void {
     container,
     '#settings-account-email',
   );
+  const firstNameInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#settings-account-first-name',
+  );
+  const lastNameInput = getRequiredElement<HTMLInputElement>(
+    container,
+    '#settings-account-last-name',
+  );
+  const phoneInput = getRequiredElement<HTMLInputElement>(container, '#settings-account-phone');
+  const photoInput = getRequiredElement<HTMLInputElement>(container, '#settings-account-photo');
   const currentPasswordInput = getRequiredElement<HTMLInputElement>(
     container,
     '#settings-current-password',
@@ -532,6 +566,27 @@ export function renderSettingsPage(container: HTMLElement): void {
 
   updateThemeControl(getTheme() === 'dark');
   emailInput.value = getAccountEmail();
+  const accountName = getAccountName();
+  firstNameInput.value = accountName.firstName;
+  lastNameInput.value = accountName.lastName;
+  const accountProfile = getAccountProfile();
+  phoneInput.value = accountProfile.phone;
+  let profilePhoto = accountProfile.profilePhoto;
+
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files?.[0];
+    if (!file) return;
+    if (file.size > 1_500_000) {
+      photoInput.setCustomValidity('A foto deve ter no máximo 1,5 MB.');
+      return;
+    }
+    photoInput.setCustomValidity('');
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      profilePhoto = typeof reader.result === 'string' ? reader.result : '';
+    });
+    reader.readAsDataURL(file);
+  });
 
   themeInput.addEventListener('change', () => {
     const theme = themeInput.checked ? 'dark' : 'light';
@@ -583,6 +638,10 @@ export function renderSettingsPage(container: HTMLElement): void {
 
     try {
       const credentialsWereUpdated = await updateCredentials({
+        firstName: firstNameInput.value,
+        lastName: lastNameInput.value,
+        phone: phoneInput.value,
+        profilePhoto,
         email: emailInput.value,
         currentPassword: currentPasswordInput.value,
         newPassword: newPasswordInput.value || undefined,
@@ -596,6 +655,10 @@ export function renderSettingsPage(container: HTMLElement): void {
       }
 
       emailInput.value = getAccountEmail();
+      const updatedName = getAccountName();
+      firstNameInput.value = updatedName.firstName;
+      lastNameInput.value = updatedName.lastName;
+      profilePhoto = getAccountProfile().profilePhoto;
       currentPasswordInput.value = '';
       newPasswordInput.value = '';
       confirmPasswordInput.value = '';
