@@ -6,11 +6,17 @@ const DEFAULT_ACCOUNT_EMAIL = 'admin@distrito.com';
 interface SessionState {
   authenticated: boolean;
   email: string;
+  role: string;
 }
 
 interface SessionResponse {
   authenticated: boolean;
-  email?: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
 }
 
 interface AccountResponse {
@@ -31,6 +37,7 @@ export interface UpdateCredentialsInput {
 let sessionState: SessionState = {
   authenticated: false,
   email: DEFAULT_ACCOUNT_EMAIL,
+  role: 'owner',
 };
 
 function apiUrl(path: string): string {
@@ -66,12 +73,14 @@ export async function initializeAuth(): Promise<void> {
     const session = await readJson<SessionResponse>(response);
     sessionState = {
       authenticated: session.authenticated,
-      email: session.email ?? DEFAULT_ACCOUNT_EMAIL,
+      email: session.user?.email ?? DEFAULT_ACCOUNT_EMAIL,
+      role: session.user?.role ?? 'owner',
     };
   } catch (error) {
     sessionState = {
       authenticated: false,
       email: DEFAULT_ACCOUNT_EMAIL,
+      role: 'owner',
     };
     console.error('Não foi possível consultar a sessão no servidor.', error);
   }
@@ -98,7 +107,8 @@ export async function login(email: string, password: string): Promise<boolean> {
   const session = await readJson<SessionResponse>(response);
   sessionState = {
     authenticated: session.authenticated,
-    email: session.email ?? email.trim().toLowerCase(),
+    email: session.user?.email ?? email.trim().toLowerCase(),
+    role: session.user?.role ?? 'owner',
   };
   return sessionState.authenticated;
 }

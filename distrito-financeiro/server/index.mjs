@@ -80,6 +80,28 @@ database.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'client',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS user_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS user_sessions_by_expiration
+  ON user_sessions (expires_at);
+
   CREATE TABLE IF NOT EXISTS auth_sessions (
     token_hash TEXT PRIMARY KEY,
     account_id INTEGER NOT NULL REFERENCES admin_accounts(id) ON DELETE CASCADE,
@@ -275,6 +297,37 @@ function seedAdminAccount() {
 
 seedAdminAccount();
 
+function seedOwnerUser() {
+  const adminAccount = database
+    .prepare('SELECT * FROM admin_accounts WHERE id = 1')
+    .get();
+
+  if (!adminAccount) return;
+
+  const existingUser = database
+    .prepare('SELECT id FROM users WHERE id = 1')
+    .get();
+
+  if (existingUser) return;
+
+  database
+    .prepare(`
+      INSERT INTO users (
+        id, name, email, password_hash, password_salt, role, status,
+        created_at, updated_at
+      ) VALUES (1, 'Proprietário', ?, ?, ?, 'owner', 'active', ?, ?)
+    `)
+    .run(
+      adminAccount.email,
+      adminAccount.password_hash,
+      adminAccount.password_salt,
+      adminAccount.created_at,
+      adminAccount.updated_at,
+    );
+}
+
+seedOwnerUser();
+
 function hashSessionToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -302,22 +355,26 @@ function getAuthenticatedSession(request) {
   const now = Date.now();
 
   database
-    .prepare('DELETE FROM auth_sessions WHERE expires_at <= ?')
+    .prepare('DELETE FROM user_sessions WHERE expires_at <= ?')
     .run(now);
 
   const session = database
     .prepare(`
       SELECT
-        auth_sessions.token_hash,
-        admin_accounts.id AS account_id,
-        admin_accounts.email,
-        admin_accounts.password_hash,
-        admin_accounts.password_salt
-      FROM auth_sessions
-      INNER JOIN admin_accounts
-        ON admin_accounts.id = auth_sessions.account_id
-      WHERE auth_sessions.token_hash = ?
-        AND auth_sessions.expires_at > ?
+        user_sessions.token_hash,
+        users.id AS user_id,
+        users.id AS account_id,
+        users.name,
+        users.email,
+        users.role,
+        users.status,
+        users.password_hash,
+        users.password_salt
+      FROM user_sessions
+      INNER JOIN users ON users.id = user_sessions.user_id
+      WHERE user_sessions.token_hash = ?
+        AND user_sessions.expires_at > ?
+        AND users.status = 'active'
     `)
     .get(tokenHash, now);
 
@@ -330,8 +387,8 @@ function createSession(accountId) {
 
   database
     .prepare(`
-      INSERT INTO auth_sessions (
-        token_hash, account_id, created_at, expires_at
+      INSERT INTO user_sessions (
+        token_hash, user_id, created_at, expires_at
       ) VALUES (?, ?, ?, ?)
     `)
     .run(
@@ -1429,7 +1486,14 @@ async function handleApiRequest(request, response, url) {
     const session = getAuthenticatedSession(request);
     sendJson(response, 200, {
       authenticated: Boolean(session),
-      email: session?.email,
+      user: session
+        ? {
+            id: session.user_id,
+            name: session.name,
+            email: session.email,
+            role: session.role,
+          }
+        : undefined,
     });
     return;
   }
@@ -1444,7 +1508,7 @@ async function handleApiRequest(request, response, url) {
     const email = normalizeEmail(body.email);
     const password = String(body.password ?? '');
     const account = database
-      .prepare('SELECT * FROM admin_accounts WHERE email = ? COLLATE NOCASE')
+      .prepare("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND status = 'active'")
       .get(email);
 
     if (!account || !verifyPassword(password, account)) {
@@ -1458,7 +1522,15 @@ async function handleApiRequest(request, response, url) {
     sendJson(
       response,
       200,
-      { authenticated: true, email: account.email },
+      {
+        authenticated: true,
+        user: {
+          id: account.id,
+          name: account.name,
+          email: account.email,
+          role: account.role,
+        },
+      },
       { 'Set-Cookie': sessionCookie(token) },
     );
     return;
@@ -1468,7 +1540,7 @@ async function handleApiRequest(request, response, url) {
     const session = getAuthenticatedSession(request);
     if (session) {
       database
-        .prepare('DELETE FROM auth_sessions WHERE token_hash = ?')
+        .prepare('DELETE FROM user_sessions WHERE token_hash = ?')
         .run(session.token_hash);
     }
 
@@ -1534,10 +1606,18 @@ async function handleApiRequest(request, response, url) {
 
     database
       .prepare(`
-        DELETE FROM auth_sessions
-        WHERE account_id = ? AND token_hash <> ?
+        UPDATE users
+        SET email = ?, password_hash = ?, password_salt = ?, updated_at = ?
+        WHERE id = ?
       `)
-      .run(session.account_id, session.token_hash);
+      .run(email, passwordHash, passwordSalt, Date.now(), session.user_id);
+
+    database
+      .prepare(`
+        DELETE FROM user_sessions
+        WHERE user_id = ? AND token_hash <> ?
+      `)
+      .run(session.user_id, session.token_hash);
 
     sendJson(response, 200, { updated: true, email });
     return;

@@ -42,6 +42,18 @@ try {
       Date.now(),
     );
 
+  database
+    .prepare(`
+      UPDATE users
+      SET password_hash = ?, password_salt = ?, updated_at = ?
+      WHERE id = 1
+    `)
+    .run(
+      passwordHash.toString('base64'),
+      salt.toString('base64'),
+      Date.now(),
+    );
+
   if (result.changes !== 1) {
     throw new Error('A conta administrativa não foi encontrada.');
   }
@@ -49,6 +61,7 @@ try {
   database
     .prepare('DELETE FROM auth_sessions WHERE account_id = 1')
     .run();
+  database.prepare('DELETE FROM user_sessions WHERE user_id = 1').run();
   database.exec('COMMIT');
   console.log('Senha administrativa redefinida e sessões encerradas.');
 } catch (error) {
