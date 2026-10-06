@@ -254,6 +254,30 @@ const loginStyles = `
     opacity: 0.65;
   }
 
+  .login-signup-link,
+  .login-signin-link {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.75rem 1rem;
+    color: #ffffff;
+    background: #0f1113;
+    border: 0;
+    border-radius: var(--radius-small);
+    cursor: pointer;
+    font-weight: 800;
+  }
+
+  .login-signup-link:hover,
+  .login-signin-link:hover {
+    background: #181b1e;
+  }
+
+  .login-signup-link:focus-visible,
+  .login-signin-link:focus-visible {
+    box-shadow: 0 0 0 0.1875rem var(--color-primary-soft);
+    outline: 0;
+  }
+
   .login-error {
     padding: 0.75rem;
     color: var(--color-danger);
@@ -378,9 +402,9 @@ export function renderLogin(container: HTMLElement): void {
       <section class="login-page" aria-labelledby="login-title">
       <div class="login-page__visual" aria-hidden="true">
         <div class="login-page__visual-copy">
-          <p class="login-page__eyebrow">Distrito Financeiro</p>
+          <p class="login-page__eyebrow">Barbearia Distrito</p>
           <h2>Painel do Distrito</h2>
-          <p>Acompanhe atendimentos, despesas e resultados em um só lugar.</p>
+          <p>Acompanhe e agende atendimentos em um só lugar.</p>
         </div>
 
         <img
@@ -470,10 +494,10 @@ export function renderLogin(container: HTMLElement): void {
 
           <p class="login-error" role="alert" hidden></p>
 
-          <button class="login-submit" type="submit">Entrar no sistema</button>
+          <button class="login-submit" type="submit">Entrar</button>
         </form>
 
-        <button class="login-signup-link" type="button">Ainda não tenho uma conta</button>
+        <button class="login-signup-link" type="button">Criar conta</button>
         <form class="login-form login-register-form" hidden>
           <label class="login-field" for="register-first-name">Nome
             <input id="register-first-name" name="firstName" autocomplete="given-name" required minlength="2" placeholder="Digite seu nome" />

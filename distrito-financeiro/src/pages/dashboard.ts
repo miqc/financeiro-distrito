@@ -10,6 +10,7 @@ import {
   listServicesByMonth,
 } from '../core/database/operations';
 import { getGlobalMonth, setGlobalMonth } from '../core/state';
+import { getAccountName } from '../core/auth';
 import type {
   ISODate,
   MonthlyConfig,
@@ -74,6 +75,12 @@ const dashboardStyles = `
     color: var(--color-text);
     font-size: 0.8125rem;
     font-weight: 650;
+  }
+
+  .dashboard-header__greeting {
+    color: var(--color-text);
+    font-size: 1.125rem;
+    font-weight: 800;
   }
 
   .dashboard-header__description {
@@ -670,6 +677,7 @@ export async function renderDashboard(
   ensureDashboardStyles();
 
   const referenceMonth = getGlobalMonth();
+  const accountName = getAccountName();
   const renderVersion = (renderVersions.get(container) ?? 0) + 1;
   renderVersions.set(container, renderVersion);
 
@@ -677,6 +685,7 @@ export async function renderDashboard(
     <section class="dashboard-page" aria-labelledby="dashboard-title">
       <header class="dashboard-header">
         <div class="dashboard-header__content">
+          <p class="dashboard-header__greeting"></p>
           <p class="dashboard-header__eyebrow">Visão mensal</p>
           <h2 id="dashboard-title">Resumo financeiro</h2>
           <p class="dashboard-header__description">
@@ -856,7 +865,7 @@ export async function renderDashboard(
         </section>
       </details>
     </section>
-  `;
+  `; 
 
   const monthInput = getRequiredElement<HTMLInputElement>(
     container,
