@@ -12,6 +12,7 @@ import {
   initializeDatabase,
   closeDatabase,
   getClient,
+  runInTransaction,
   isProduction,
   getDbMode,
 } from './db/index.mjs';
@@ -172,27 +173,30 @@ async function getAuthenticatedSession(request) {
   const now = Date.now();
 
   const db = await getClient();
-  await db
-    .prepare('DELETE FROM auth_sessions WHERE expires_at <= $1')
-    .run(now);
+  let session;
+  try {
+    await db
+      .prepare('DELETE FROM auth_sessions WHERE expires_at <= $1')
+      .run(now);
 
-  const session = await db
-    .prepare(`
-      SELECT
-        auth_sessions.token_hash,
-        admin_accounts.id AS account_id,
-        admin_accounts.email,
-        admin_accounts.password_hash,
-        admin_accounts.password_salt
-      FROM auth_sessions
-      INNER JOIN admin_accounts
-        ON admin_accounts.id = auth_sessions.account_id
-      WHERE auth_sessions.token_hash = $1
-        AND auth_sessions.expires_at > $2
-    `)
-    .get(tokenHash, now);
-
-  db.release();
+    session = await db
+      .prepare(`
+        SELECT
+          auth_sessions.token_hash,
+          admin_accounts.id AS account_id,
+          admin_accounts.email,
+          admin_accounts.password_hash,
+          admin_accounts.password_salt
+        FROM auth_sessions
+        INNER JOIN admin_accounts
+          ON admin_accounts.id = auth_sessions.account_id
+        WHERE auth_sessions.token_hash = $1
+          AND auth_sessions.expires_at > $2
+      `)
+      .get(tokenHash, now);
+  } finally {
+    db.release();
+  }
 
   return session ? { ...session, token } : undefined;
 }
@@ -614,30 +618,12 @@ function parseSaleInput(value, source, options = {}) {
 }
 
 async function withTransaction(operation) {
-  const { client, release } = await getClient();
-  try {
-    if (getDbMode() === 'postgres') {
-      await client.query('BEGIN');
-      const result = await operation();
-      await client.query('COMMIT');
-      release();
-      return result;
-    } else {
-      client.exec('BEGIN IMMEDIATE');
-      const result = operation();
-      client.exec('COMMIT');
-      release();
-      return result;
-    }
-  } catch (error) {
-    if (getDbMode() === 'postgres') {
-      await client.query('ROLLBACK');
-    } else {
-      client.exec('ROLLBACK');
-    }
-    release();
-    throw error;
-  }
+  // Antes o BEGIN/COMMIT era executado em um client do pool enquanto as
+  // consultas internas pegavam OUTRO client, ou seja, no PostgreSQL a
+  // transação não abrangia nada (no SQLite funcionava porque há um único
+  // objeto de banco). `runInTransaction` compartilha o mesmo client com todas
+  // as chamadas internas de `getClient()`.
+  return runInTransaction(operation);
 }
 
 function asExpense(row) {
@@ -676,14 +662,16 @@ function asAttendanceItem(row) {
 
 async function getSaleItems(saleId) {
   const db = await getClient();
-  const items = await db.prepare(`
-    SELECT kind, position, catalog_item_id, description, amount_cents
-    FROM sale_items
-    WHERE sale_id = $1
-    ORDER BY kind, position
-  `).all(saleId);
-  db.release();
-  return items;
+  try {
+    return await db.prepare(`
+      SELECT kind, position, catalog_item_id, description, amount_cents
+      FROM sale_items
+      WHERE sale_id = $1
+      ORDER BY kind, position
+    `).all(saleId);
+  } finally {
+    db.release();
+  }
 }
 
 async function asSale(row) {
@@ -747,12 +735,14 @@ async function resolveCatalogItemId(accountId, catalogItemId, kind) {
 async function runInsert(statement, parameters, { ignore = false } = {}) {
   const db = await getClient();
   try {
-    if (ignore && getDbMode() === 'sqlite') {
-      const result = await db.prepare(statement.replace(/^INSERT /, 'INSERT OR IGNORE ')).run(...parameters);
-      db.release();
-      return result;
-    }
-    const result = await db.prepare(statement).run(...parameters);
+    // "Ignorar duplicados": SQLite usa INSERT OR IGNORE, PostgreSQL usa
+    // ON CONFLICT DO NOTHING (ambos retornam `changes` = 0 no conflito).
+    const sql = !ignore
+      ? statement
+      : getDbMode() === 'sqlite'
+        ? statement.replace(/^INSERT /, 'INSERT OR IGNORE ')
+        : `${statement.trimEnd()} ON CONFLICT DO NOTHING`;
+    const result = await db.prepare(sql).run(...parameters);
     db.release();
     return result;
   } catch (error) {
@@ -847,48 +837,67 @@ async function insertSale(record, accountId, source, options = {}) {
   if (result.changes !== 1) return false;
 
   const db = await getClient();
-  const insertItem = db.prepare(`
-    INSERT INTO sale_items (
-      sale_id, kind, position, catalog_item_id, description, amount_cents
-    ) VALUES ($1, $2, $3, $4, $5, $6)
-  `);
+  try {
+    const insertItem = db.prepare(`
+      INSERT INTO sale_items (
+        sale_id, kind, position, catalog_item_id, description, amount_cents
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+    `);
 
-  const itemGroups = [
-    ['service', record.serviceItems],
-    ['product', record.productItems],
-  ];
+    const itemGroups = [
+      ['service', record.serviceItems],
+      ['product', record.productItems],
+    ];
 
-  for (const [kind, items] of itemGroups) {
-    items.forEach((item, position) => {
-      insertItem.run(
-        record.id,
-        kind,
-        position,
-        resolveCatalogItemId(accountId, item.catalogItemId, kind),
-        item.description,
-        item.amountCents,
-      );
-    });
+    // No PostgreSQL `prepare().run()` é assíncrono: é preciso aguardar cada
+    // inserção (e o `resolveCatalogItemId`, que era passado como Promise) para
+    // não disparar consultas sem await e perder os itens da venda.
+    for (const [kind, items] of itemGroups) {
+      for (const [position, item] of items.entries()) {
+        const catalogItemId = await resolveCatalogItemId(
+          accountId,
+          item.catalogItemId,
+          kind,
+        );
+        await insertItem.run(
+          record.id,
+          kind,
+          position,
+          catalogItemId,
+          item.description,
+          item.amountCents,
+        );
+      }
+    }
+
+    return true;
+  } finally {
+    db.release();
   }
-
-  db.release();
-  return true;
 }
 
-function getDatedFilter(searchParams) {
+// Os placeholders "$n" precisam ser únicos e consecutivos dentro de uma mesma
+// instrução: no PostgreSQL o número é tipado na primeira ocorrência (aqui
+// `$1`/`$2` já são `account_id`/`source`, ou seja, int/text), então reutilizá-los
+// gera erros como `operator does not exist: text >= integer`.
+function getDatedFilter(searchParams, firstParameterIndex) {
   const monthValue = searchParams.get('month');
   const dateValue = searchParams.get('date');
 
   if (monthValue && dateValue) throw requestError(400, 'invalid_filter');
 
   if (dateValue) {
-    return { clause: ' AND date = $1', parameters: [parseDate(dateValue)] };
+    return {
+      clause: ` AND date = $${firstParameterIndex}`,
+      parameters: [parseDate(dateValue)],
+    };
   }
 
   if (monthValue) {
     const month = parseReferenceMonth(monthValue);
     return {
-      clause: ' AND date >= $1 AND date < $2',
+      clause:
+        ` AND date >= $${firstParameterIndex} AND date < $${firstParameterIndex + 1}`,
       parameters: [`${month}-01`, `${getNextReferenceMonth(month)}-01`],
     };
   }
@@ -897,46 +906,63 @@ function getDatedFilter(searchParams) {
 }
 
 async function listExpenses(accountId, searchParams) {
-  const filter = getDatedFilter(searchParams);
+  // `account_id = $1` já ocupa o $1, então o filtro do mês começa em $2.
+  const filter = getDatedFilter(searchParams, 2);
   const db = await getClient();
-  const expenses = await db.prepare(`
-    SELECT id, date, description, amount_cents
-    FROM expenses
-    WHERE account_id = $1${filter.clause}
-    ORDER BY date DESC, created_at DESC, id
-  `).all(accountId, ...filter.parameters);
-  db.release();
-  return expenses.map(asExpense);
+  try {
+    const expenses = await db.prepare(`
+      SELECT id, date, description, amount_cents
+      FROM expenses
+      WHERE account_id = $1${filter.clause}
+      ORDER BY date DESC, created_at DESC, id
+    `).all(accountId, ...filter.parameters);
+    return expenses.map(asExpense);
+  } finally {
+    db.release();
+  }
 }
 
 async function listSales(accountId, source, searchParams) {
-  const filter = getDatedFilter(searchParams);
+  // `account_id = $1` e `source = $2` já ocupam $1/$2, então o filtro do mês
+  // começa em $3 (antes era $1/$2 e virava `date >= integer`).
+  const filter = getDatedFilter(searchParams, 3);
   const db = await getClient();
-  const sales = await db.prepare(`
-    SELECT id, source, date, recorded_at, payment_method
-    FROM sales
-    WHERE account_id = $1 AND source = $2${filter.clause}
-    ORDER BY date DESC, COALESCE(recorded_at, '') DESC, created_at DESC, id
-  `).all(accountId, source, ...filter.parameters);
-  db.release();
-  return Promise.all(sales.map(asSale));
+  try {
+    const sales = await db.prepare(`
+      SELECT id, source, date, recorded_at, payment_method
+      FROM sales
+      WHERE account_id = $1 AND source = $2${filter.clause}
+      ORDER BY date DESC, COALESCE(recorded_at, '') DESC, created_at DESC, id
+    `).all(accountId, source, ...filter.parameters);
+    return await Promise.all(sales.map(asSale));
+  } finally {
+    db.release();
+  }
 }
 
 async function listMonthlyConfigs(accountId, searchParams) {
   const monthValue = searchParams.get('month') ?? searchParams.get('referenceMonth');
+  // `account_id = $1` já ocupa o $1; `reference_month = $2` usa o próximo
+  // placeholder (reutilizar $1 faria `reference_month = integer`).
   const filter = monthValue
-    ? { clause: ' AND reference_month = $1', parameters: [parseReferenceMonth(monthValue)] }
+    ? {
+        clause: ' AND reference_month = $2',
+        parameters: [parseReferenceMonth(monthValue)],
+      }
     : { clause: '', parameters: [] };
 
   const db = await getClient();
-  const configs = await db.prepare(`
-    SELECT id, reference_month, working_days
-    FROM monthly_configs
-    WHERE account_id = $1${filter.clause}
-    ORDER BY reference_month DESC, id
-  `).all(accountId, ...filter.parameters);
-  db.release();
-  return configs.map(asMonthlyConfig);
+  try {
+    const configs = await db.prepare(`
+      SELECT id, reference_month, working_days
+      FROM monthly_configs
+      WHERE account_id = $1${filter.clause}
+      ORDER BY reference_month DESC, id
+    `).all(accountId, ...filter.parameters);
+    return configs.map(asMonthlyConfig);
+  } finally {
+    db.release();
+  }
 }
 
 async function listCatalogItems(accountId, searchParams) {
@@ -945,19 +971,23 @@ async function listCatalogItems(accountId, searchParams) {
     throw requestError(400, 'invalid_catalog_type');
   }
 
+  // `account_id = $1` já ocupa o $1; `type = $2` usa o próximo placeholder.
   const filter = typeValue
-    ? { clause: ' AND type = $1', parameters: [typeValue] }
+    ? { clause: ' AND type = $2', parameters: [typeValue] }
     : { clause: '', parameters: [] };
 
   const db = await getClient();
-  const items = await db.prepare(`
-    SELECT id, type, description, price_cents
-    FROM catalog_items
-    WHERE account_id = $1${filter.clause}
-    ORDER BY type, LOWER(description), id
-  `).all(accountId, ...filter.parameters);
-  db.release();
-  return items.map(asCatalogItem);
+  try {
+    const items = await db.prepare(`
+      SELECT id, type, description, price_cents
+      FROM catalog_items
+      WHERE account_id = $1${filter.clause}
+      ORDER BY type, LOWER(description), id
+    `).all(accountId, ...filter.parameters);
+    return items.map(asCatalogItem);
+  } finally {
+    db.release();
+  }
 }
 
 async function getDataRecord(store, id, accountId) {

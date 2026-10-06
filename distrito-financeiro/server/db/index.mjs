@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { Pool } from 'pg';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -83,6 +84,45 @@ function createPgPool() {
   return pool;
 }
 
+// Durante uma transação o client é compartilhado por AsyncLocalStorage:
+// todas as chamadas internas a getClient() usam a MESMA conexão. Sem isso o
+// BEGIN/COMMIT era executado em um client do pool enquanto as consultas iam
+// para outro, tornando a transação inócua no PostgreSQL (no SQLite isso já
+// funcionava porque existe um único objeto de banco).
+const transactionStorage = new AsyncLocalStorage();
+
+function createPostgresHandle(client, { ownsClient }) {
+  return {
+    client,
+    release: () => {
+      // Quem está dentro de uma transação não devolve o client ao pool;
+      // quem abriu a conexão (fora de transação) é responsável pelo release.
+      if (ownsClient) client.release();
+    },
+    query: (...args) => client.query(...args),
+    exec: async (sql) => {
+      await client.query(sql);
+    },
+    prepare: (sql) => ({
+      run: async (...params) => {
+        const result = await client.query(sql, params);
+        return {
+          lastInsertRowid: result.rows.length > 0 ? result.rows[result.rows.length - 1].id : null,
+          changes: result.rowCount,
+        };
+      },
+      get: async (...params) => {
+        const result = await client.query(sql, params);
+        return result.rows[0] || null;
+      },
+      all: async (...params) => {
+        const result = await client.query(sql, params);
+        return result.rows;
+      },
+    }),
+  };
+}
+
 // Database abstraction
 let sqliteDb = null;
 let pgPool = null;
@@ -98,34 +138,11 @@ export function isProduction() {
 
 export async function getClient() {
   if (currentMode === 'postgres') {
+    const activeTransaction = transactionStorage.getStore();
+    if (activeTransaction) return activeTransaction;
+
     const client = await pgPool.connect();
-    return {
-      client,
-      release: () => client.release(),
-      query: (...args) => client.query(...args),
-      exec: async (sql) => {
-        await client.query(sql);
-      },
-      prepare: (sql) => {
-        return {
-          run: async (...params) => {
-            const result = await client.query(sql, params);
-            return {
-              lastInsertRowid: result.rows.length > 0 ? result.rows[result.rows.length - 1].id : null,
-              changes: result.rowCount,
-            };
-          },
-          get: async (...params) => {
-            const result = await client.query(sql, params);
-            return result.rows[0] || null;
-          },
-          all: async (...params) => {
-            const result = await client.query(sql, params);
-            return result.rows;
-          },
-        };
-      },
-    };
+    return createPostgresHandle(client, { ownsClient: true });
   } else {
     return {
       client: sqliteDb,
@@ -150,6 +167,40 @@ export async function getClient() {
       exec: (sql) => sqliteDb.exec(sql),
       prepare: (sql) => prepareSqliteStatement(sql),
     };
+  }
+}
+
+// Executa `operation` dentro de uma transação, garantindo que todas as
+// chamadas internas a getClient() participem da MESMA transação (mesma
+// conexão no PostgreSQL; mesma base de dados no SQLite).
+export async function runInTransaction(operation) {
+  if (currentMode === 'postgres') {
+    const client = await pgPool.connect();
+    const handle = createPostgresHandle(client, { ownsClient: false });
+
+    return transactionStorage.run(handle, async () => {
+      await client.query('BEGIN');
+      try {
+        const result = await operation();
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    });
+  }
+
+  sqliteDb.exec('BEGIN IMMEDIATE');
+  try {
+    const result = await operation();
+    sqliteDb.exec('COMMIT');
+    return result;
+  } catch (error) {
+    sqliteDb.exec('ROLLBACK');
+    throw error;
   }
 }
 
