@@ -2,6 +2,9 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+# Install OpenSSL for pg crypto (needed by PostgreSQL client)
+RUN apk add --no-cache openssl
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -11,8 +14,10 @@ RUN npm run build
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8787
-ENV DATABASE_PATH=/app/data/distrito.sqlite
+# DATABASE_URL must be set by the deployment environment.
 ENV COOKIE_SECURE=true
+# Optional: restrict CORS origins in production
+# ENV CORS_ORIGIN=https://sua-app.com
 
 EXPOSE 8787
 

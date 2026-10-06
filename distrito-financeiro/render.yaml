@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: distrito-financeiro
+    runtime: node
+    region: sa-east-1
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: node server/index.mjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: COOKIE_SECURE
+        value: true
+      - key: CORS_ORIGIN
+        value: ""
+        sync: false
+      - key: ADMIN_EMAIL
+        value: admin@distrito.com
+        sync: false
+      - key: ADMIN_PASSWORD
+        generateValue: true
+        sync: false
+      - key: SESSION_TTL_HOURS
+        value: "168"
+      - key: DATABASE_URL
+        sync: false

@@ -8,22 +8,24 @@ import {
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, dirname, join, resolve, sep } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import {
+  initializeDatabase,
+  closeDatabase,
+  getClient,
+  isProduction,
+  getDbMode,
+} from './db/index.mjs';
 
 const rootDirectory = resolve(process.cwd());
 const distributionDirectory = join(rootDirectory, 'dist');
-const databasePath = resolve(
-  process.env.DATABASE_PATH ?? join(rootDirectory, 'data', 'distrito.sqlite'),
-);
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 8787);
-const isProduction = process.env.NODE_ENV === 'production';
 const sessionDurationHours = Number(process.env.SESSION_TTL_HOURS ?? 24 * 7);
 const sessionDurationSeconds = Math.max(1, sessionDurationHours) * 60 * 60;
 const cookieName = 'distrito_session';
 const cookieIsSecure =
   process.env.COOKIE_SECURE === 'true' ||
-  (process.env.COOKIE_SECURE !== 'false' && isProduction);
+  (process.env.COOKIE_SECURE !== 'false' && isProduction());
 const allowedOrigins = new Set(
   (process.env.CORS_ORIGIN ?? '')
     .split(',')
@@ -63,140 +65,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
   throw new Error('PORT deve ser um número entre 1 e 65535.');
 }
 
-mkdirSync(dirname(databasePath), { recursive: true });
-
-const database = new DatabaseSync(databasePath);
-database.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA foreign_keys = ON;
-  PRAGMA busy_timeout = 5000;
-
-  CREATE TABLE IF NOT EXISTS admin_accounts (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
-    password_salt TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS auth_sessions (
-    token_hash TEXT PRIMARY KEY,
-    account_id INTEGER NOT NULL REFERENCES admin_accounts(id) ON DELETE CASCADE,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS auth_sessions_by_expiration
-  ON auth_sessions (expires_at);
-`);
-
-function applyDatabaseMigrations() {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      applied_at INTEGER NOT NULL
-    );
-  `);
-
-  const migrationAlreadyApplied = database
-    .prepare('SELECT 1 FROM schema_migrations WHERE version = 1')
-    .get();
-
-  if (migrationAlreadyApplied) return;
-
-  database.exec('BEGIN IMMEDIATE');
-
-  try {
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS expenses (
-        id TEXT PRIMARY KEY,
-        account_id INTEGER NOT NULL
-          REFERENCES admin_accounts(id) ON DELETE CASCADE,
-        date TEXT NOT NULL,
-        description TEXT NOT NULL,
-        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS expenses_by_account_date
-      ON expenses (account_id, date DESC, created_at DESC);
-
-      CREATE TABLE IF NOT EXISTS catalog_items (
-        id TEXT PRIMARY KEY,
-        account_id INTEGER NOT NULL
-          REFERENCES admin_accounts(id) ON DELETE CASCADE,
-        type TEXT NOT NULL CHECK (type IN ('service', 'product')),
-        description TEXT NOT NULL,
-        price_cents INTEGER NOT NULL CHECK (price_cents >= 0),
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS catalog_items_by_account_type
-      ON catalog_items (account_id, type, description COLLATE NOCASE);
-
-      CREATE TABLE IF NOT EXISTS sales (
-        id TEXT PRIMARY KEY,
-        account_id INTEGER NOT NULL
-          REFERENCES admin_accounts(id) ON DELETE CASCADE,
-        source TEXT NOT NULL CHECK (source IN ('service', 'legacy_product')),
-        date TEXT NOT NULL,
-        recorded_at TEXT,
-        payment_method TEXT
-          CHECK (payment_method IS NULL OR payment_method IN ('cash', 'card', 'pix')),
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS sales_by_account_source_date
-      ON sales (account_id, source, date DESC, recorded_at DESC, created_at DESC);
-
-      CREATE TABLE IF NOT EXISTS sale_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sale_id TEXT NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('service', 'product')),
-        position INTEGER NOT NULL CHECK (position >= 0),
-        catalog_item_id TEXT REFERENCES catalog_items(id) ON DELETE SET NULL,
-        description TEXT NOT NULL,
-        amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
-        UNIQUE (sale_id, kind, position)
-      );
-
-      CREATE INDEX IF NOT EXISTS sale_items_by_sale
-      ON sale_items (sale_id, kind, position);
-
-      CREATE TABLE IF NOT EXISTS monthly_configs (
-        id TEXT PRIMARY KEY,
-        account_id INTEGER NOT NULL
-          REFERENCES admin_accounts(id) ON DELETE CASCADE,
-        reference_month TEXT NOT NULL,
-        working_days INTEGER NOT NULL CHECK (working_days BETWEEN 1 AND 31),
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        UNIQUE (account_id, reference_month)
-      );
-
-      CREATE INDEX IF NOT EXISTS monthly_configs_by_account_month
-      ON monthly_configs (account_id, reference_month);
-    `);
-
-    database
-      .prepare(`
-        INSERT INTO schema_migrations (version, name, applied_at)
-        VALUES (1, 'financial_data', ?)
-      `)
-      .run(Date.now());
-    database.exec('COMMIT');
-  } catch (error) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
-}
-
-applyDatabaseMigrations();
+await initializeDatabase();
 
 function normalizeEmail(value) {
   return String(value ?? '').trim().toLowerCase();
@@ -233,12 +102,13 @@ function verifyPassword(password, account) {
   );
 }
 
-function seedAdminAccount() {
-  const existingAccount = database
-    .prepare('SELECT id FROM admin_accounts WHERE id = 1')
-    .get();
-
-  if (existingAccount) return;
+async function seedAdminAccount() {
+  const db = await getClient();
+  const existingAccount = await db.prepare('SELECT id FROM admin_accounts WHERE id = 1').get();
+  if (existingAccount) {
+    db.release();
+    return;
+  }
 
   const email = normalizeEmail(
     process.env.ADMIN_EMAIL ?? 'admin@distrito.com',
@@ -249,13 +119,13 @@ function seedAdminAccount() {
     throw new Error('ADMIN_EMAIL precisa conter um e-mail válido.');
   }
 
-  if (isProduction && password.length < 8) {
+  if (isProduction() && password.length < 8) {
     throw new Error(
       'Defina ADMIN_PASSWORD com pelo menos 8 caracteres antes de iniciar em produção.',
     );
   }
 
-  if (!isProduction && !process.env.ADMIN_PASSWORD) {
+  if (!isProduction() && !process.env.ADMIN_PASSWORD) {
     console.warn(
       'A conta inicial de desenvolvimento usa admin@distrito.com / admin. Altere-a em Configurações.',
     );
@@ -264,16 +134,16 @@ function seedAdminAccount() {
   const credentials = hashPassword(password);
   const now = Date.now();
 
-  database
-    .prepare(`
-      INSERT INTO admin_accounts (
-        id, email, password_hash, password_salt, created_at, updated_at
-      ) VALUES (1, ?, ?, ?, ?, ?)
-    `)
-    .run(email, credentials.hash, credentials.salt, now, now);
+  await db.prepare(`
+    INSERT INTO admin_accounts (
+      id, email, password_hash, password_salt, created_at, updated_at
+    ) VALUES (1, $1, $2, $3, $4, $5)
+  `).run(email, credentials.hash, credentials.salt, now, now);
+
+  db.release();
 }
 
-seedAdminAccount();
+await seedAdminAccount();
 
 function hashSessionToken(token) {
   return createHash('sha256').update(token).digest('hex');
@@ -294,18 +164,19 @@ function parseCookies(request) {
   return cookies;
 }
 
-function getAuthenticatedSession(request) {
+async function getAuthenticatedSession(request) {
   const token = parseCookies(request).get(cookieName);
   if (!token) return undefined;
 
   const tokenHash = hashSessionToken(token);
   const now = Date.now();
 
-  database
-    .prepare('DELETE FROM auth_sessions WHERE expires_at <= ?')
+  const db = await getClient();
+  await db
+    .prepare('DELETE FROM auth_sessions WHERE expires_at <= $1')
     .run(now);
 
-  const session = database
+  const session = await db
     .prepare(`
       SELECT
         auth_sessions.token_hash,
@@ -316,23 +187,26 @@ function getAuthenticatedSession(request) {
       FROM auth_sessions
       INNER JOIN admin_accounts
         ON admin_accounts.id = auth_sessions.account_id
-      WHERE auth_sessions.token_hash = ?
-        AND auth_sessions.expires_at > ?
+      WHERE auth_sessions.token_hash = $1
+        AND auth_sessions.expires_at > $2
     `)
     .get(tokenHash, now);
+
+  db.release();
 
   return session ? { ...session, token } : undefined;
 }
 
-function createSession(accountId) {
+async function createSession(accountId) {
   const token = randomBytes(32).toString('base64url');
   const now = Date.now();
 
-  database
+  const db = await getClient();
+  await db
     .prepare(`
       INSERT INTO auth_sessions (
         token_hash, account_id, created_at, expires_at
-      ) VALUES (?, ?, ?, ?)
+      ) VALUES ($1, $2, $3, $4)
     `)
     .run(
       hashSessionToken(token),
@@ -341,6 +215,7 @@ function createSession(accountId) {
       now + sessionDurationSeconds * 1000,
     );
 
+  db.release();
   return token;
 }
 
@@ -374,7 +249,7 @@ function applyCors(request, response) {
   }
 
   const originIsAllowed =
-    !isProduction ||
+    !isProduction() ||
     originHost === requestHost ||
     allowedOrigins.has(origin);
   if (!originIsAllowed) return false;
@@ -738,14 +613,29 @@ function parseSaleInput(value, source, options = {}) {
   };
 }
 
-function withTransaction(operation) {
-  database.exec('BEGIN IMMEDIATE');
+async function withTransaction(operation) {
+  const { client, release } = await getClient();
   try {
-    const result = operation();
-    database.exec('COMMIT');
-    return result;
+    if (getDbMode() === 'postgres') {
+      await client.query('BEGIN');
+      const result = await operation();
+      await client.query('COMMIT');
+      release();
+      return result;
+    } else {
+      client.exec('BEGIN IMMEDIATE');
+      const result = operation();
+      client.exec('COMMIT');
+      release();
+      return result;
+    }
   } catch (error) {
-    database.exec('ROLLBACK');
+    if (getDbMode() === 'postgres') {
+      await client.query('ROLLBACK');
+    } else {
+      client.exec('ROLLBACK');
+    }
+    release();
     throw error;
   }
 }
@@ -784,19 +674,20 @@ function asAttendanceItem(row) {
   };
 }
 
-function getSaleItems(saleId) {
-  return database
-    .prepare(`
-      SELECT kind, position, catalog_item_id, description, amount_cents
-      FROM sale_items
-      WHERE sale_id = ?
-      ORDER BY kind, position
-    `)
-    .all(saleId);
+async function getSaleItems(saleId) {
+  const db = await getClient();
+  const items = await db.prepare(`
+    SELECT kind, position, catalog_item_id, description, amount_cents
+    FROM sale_items
+    WHERE sale_id = $1
+    ORDER BY kind, position
+  `).all(saleId);
+  db.release();
+  return items;
 }
 
-function asSale(row) {
-  const itemRows = getSaleItems(row.id);
+async function asSale(row) {
+  const itemRows = await getSaleItems(row.id);
   const serviceItemRows = itemRows.filter((item) => item.kind === 'service');
   const productItemRows = itemRows.filter((item) => item.kind === 'product');
   const optionalFields = {
@@ -839,39 +730,47 @@ function asSale(row) {
   };
 }
 
-function resolveCatalogItemId(accountId, catalogItemId, kind) {
+async function resolveCatalogItemId(accountId, catalogItemId, kind) {
   if (!catalogItemId) return null;
 
-  const catalogItem = database
-    .prepare(`
-      SELECT id
-      FROM catalog_items
-      WHERE id = ? AND account_id = ? AND type = ?
-    `)
-    .get(catalogItemId, accountId, kind);
+  const db = await getClient();
+  const catalogItem = await db.prepare(`
+    SELECT id
+    FROM catalog_items
+    WHERE id = $1 AND account_id = $2 AND type = $3
+  `).get(catalogItemId, accountId, kind);
+  db.release();
 
   return catalogItem ? catalogItemId : null;
 }
 
-function runInsert(statement, parameters, { ignore = false } = {}) {
+async function runInsert(statement, parameters, { ignore = false } = {}) {
+  const db = await getClient();
   try {
-    return database
-      .prepare(ignore ? statement.replace(/^INSERT /, 'INSERT OR IGNORE ') : statement)
-      .run(...parameters);
+    if (ignore && getDbMode() === 'sqlite') {
+      const result = await db.prepare(statement.replace(/^INSERT /, 'INSERT OR IGNORE ')).run(...parameters);
+      db.release();
+      return result;
+    }
+    const result = await db.prepare(statement).run(...parameters);
+    db.release();
+    return result;
   } catch (error) {
-    if (String(error?.message ?? '').includes('UNIQUE constraint failed')) {
+    db.release();
+    if (String(error?.message ?? '').includes('UNIQUE constraint failed') ||
+        String(error?.message ?? '').includes('duplicate key')) {
       throw requestError(409, 'record_already_exists');
     }
     throw error;
   }
 }
 
-function insertExpense(record, accountId, options = {}) {
+async function insertExpense(record, accountId, options = {}) {
   const now = Date.now();
-  const result = runInsert(
+  const result = await runInsert(
     `INSERT INTO expenses (
       id, account_id, date, description, amount_cents, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       record.id,
       accountId,
@@ -886,12 +785,12 @@ function insertExpense(record, accountId, options = {}) {
   return result.changes === 1;
 }
 
-function insertCatalogItem(record, accountId, options = {}) {
+async function insertCatalogItem(record, accountId, options = {}) {
   const now = Date.now();
-  const result = runInsert(
+  const result = await runInsert(
     `INSERT INTO catalog_items (
       id, account_id, type, description, price_cents, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       record.id,
       accountId,
@@ -906,12 +805,12 @@ function insertCatalogItem(record, accountId, options = {}) {
   return result.changes === 1;
 }
 
-function insertMonthlyConfig(record, accountId, options = {}) {
+async function insertMonthlyConfig(record, accountId, options = {}) {
   const now = Date.now();
-  const result = runInsert(
+  const result = await runInsert(
     `INSERT INTO monthly_configs (
       id, account_id, reference_month, working_days, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       record.id,
       accountId,
@@ -925,13 +824,13 @@ function insertMonthlyConfig(record, accountId, options = {}) {
   return result.changes === 1;
 }
 
-function insertSale(record, accountId, source, options = {}) {
+async function insertSale(record, accountId, source, options = {}) {
   const now = Date.now();
-  const result = runInsert(
+  const result = await runInsert(
     `INSERT INTO sales (
       id, account_id, source, date, recorded_at, payment_method,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       record.id,
       accountId,
@@ -947,10 +846,11 @@ function insertSale(record, accountId, source, options = {}) {
 
   if (result.changes !== 1) return false;
 
-  const insertItem = database.prepare(`
+  const db = await getClient();
+  const insertItem = db.prepare(`
     INSERT INTO sale_items (
       sale_id, kind, position, catalog_item_id, description, amount_cents
-    ) VALUES (?, ?, ?, ?, ?, ?)
+    ) VALUES ($1, $2, $3, $4, $5, $6)
   `);
 
   const itemGroups = [
@@ -971,6 +871,7 @@ function insertSale(record, accountId, source, options = {}) {
     });
   }
 
+  db.release();
   return true;
 }
 
@@ -981,13 +882,13 @@ function getDatedFilter(searchParams) {
   if (monthValue && dateValue) throw requestError(400, 'invalid_filter');
 
   if (dateValue) {
-    return { clause: ' AND date = ?', parameters: [parseDate(dateValue)] };
+    return { clause: ' AND date = $1', parameters: [parseDate(dateValue)] };
   }
 
   if (monthValue) {
     const month = parseReferenceMonth(monthValue);
     return {
-      clause: ' AND date >= ? AND date < ?',
+      clause: ' AND date >= $1 AND date < $2',
       parameters: [`${month}-01`, `${getNextReferenceMonth(month)}-01`],
     };
   }
@@ -995,108 +896,106 @@ function getDatedFilter(searchParams) {
   return { clause: '', parameters: [] };
 }
 
-function listExpenses(accountId, searchParams) {
+async function listExpenses(accountId, searchParams) {
   const filter = getDatedFilter(searchParams);
-  return database
-    .prepare(`
-      SELECT id, date, description, amount_cents
-      FROM expenses
-      WHERE account_id = ?${filter.clause}
-      ORDER BY date DESC, created_at DESC, id
-    `)
-    .all(accountId, ...filter.parameters)
-    .map(asExpense);
+  const db = await getClient();
+  const expenses = await db.prepare(`
+    SELECT id, date, description, amount_cents
+    FROM expenses
+    WHERE account_id = $1${filter.clause}
+    ORDER BY date DESC, created_at DESC, id
+  `).all(accountId, ...filter.parameters);
+  db.release();
+  return expenses.map(asExpense);
 }
 
-function listSales(accountId, source, searchParams) {
+async function listSales(accountId, source, searchParams) {
   const filter = getDatedFilter(searchParams);
-  return database
-    .prepare(`
-      SELECT id, source, date, recorded_at, payment_method
-      FROM sales
-      WHERE account_id = ? AND source = ?${filter.clause}
-      ORDER BY date DESC, COALESCE(recorded_at, '') DESC, created_at DESC, id
-    `)
-    .all(accountId, source, ...filter.parameters)
-    .map(asSale);
+  const db = await getClient();
+  const sales = await db.prepare(`
+    SELECT id, source, date, recorded_at, payment_method
+    FROM sales
+    WHERE account_id = $1 AND source = $2${filter.clause}
+    ORDER BY date DESC, COALESCE(recorded_at, '') DESC, created_at DESC, id
+  `).all(accountId, source, ...filter.parameters);
+  db.release();
+  return Promise.all(sales.map(asSale));
 }
 
-function listMonthlyConfigs(accountId, searchParams) {
+async function listMonthlyConfigs(accountId, searchParams) {
   const monthValue = searchParams.get('month') ?? searchParams.get('referenceMonth');
   const filter = monthValue
-    ? { clause: ' AND reference_month = ?', parameters: [parseReferenceMonth(monthValue)] }
+    ? { clause: ' AND reference_month = $1', parameters: [parseReferenceMonth(monthValue)] }
     : { clause: '', parameters: [] };
 
-  return database
-    .prepare(`
-      SELECT id, reference_month, working_days
-      FROM monthly_configs
-      WHERE account_id = ?${filter.clause}
-      ORDER BY reference_month DESC, id
-    `)
-    .all(accountId, ...filter.parameters)
-    .map(asMonthlyConfig);
+  const db = await getClient();
+  const configs = await db.prepare(`
+    SELECT id, reference_month, working_days
+    FROM monthly_configs
+    WHERE account_id = $1${filter.clause}
+    ORDER BY reference_month DESC, id
+  `).all(accountId, ...filter.parameters);
+  db.release();
+  return configs.map(asMonthlyConfig);
 }
 
-function listCatalogItems(accountId, searchParams) {
+async function listCatalogItems(accountId, searchParams) {
   const typeValue = searchParams.get('type');
   if (typeValue && !catalogTypes.has(typeValue)) {
     throw requestError(400, 'invalid_catalog_type');
   }
 
   const filter = typeValue
-    ? { clause: ' AND type = ?', parameters: [typeValue] }
+    ? { clause: ' AND type = $1', parameters: [typeValue] }
     : { clause: '', parameters: [] };
 
-  return database
-    .prepare(`
-      SELECT id, type, description, price_cents
-      FROM catalog_items
-      WHERE account_id = ?${filter.clause}
-      ORDER BY type, description COLLATE NOCASE, id
-    `)
-    .all(accountId, ...filter.parameters)
-    .map(asCatalogItem);
+  const db = await getClient();
+  const items = await db.prepare(`
+    SELECT id, type, description, price_cents
+    FROM catalog_items
+    WHERE account_id = $1${filter.clause}
+    ORDER BY type, LOWER(description), id
+  `).all(accountId, ...filter.parameters);
+  db.release();
+  return items.map(asCatalogItem);
 }
 
-function getDataRecord(store, id, accountId) {
+async function getDataRecord(store, id, accountId) {
+  const db = await getClient();
+
   if (store === 'expenses') {
-    const row = database
-      .prepare(`
-        SELECT id, date, description, amount_cents
-        FROM expenses WHERE id = ? AND account_id = ?
-      `)
-      .get(id, accountId);
+    const row = await db.prepare(`
+      SELECT id, date, description, amount_cents
+      FROM expenses WHERE id = $1 AND account_id = $2
+    `).get(id, accountId);
+    db.release();
     return row ? asExpense(row) : undefined;
   }
 
   if (store === 'services' || store === 'products') {
     const source = store === 'services' ? 'service' : 'legacy_product';
-    const row = database
-      .prepare(`
-        SELECT id, source, date, recorded_at, payment_method
-        FROM sales WHERE id = ? AND account_id = ? AND source = ?
-      `)
-      .get(id, accountId, source);
-    return row ? asSale(row) : undefined;
+    const row = await db.prepare(`
+      SELECT id, source, date, recorded_at, payment_method
+      FROM sales WHERE id = $1 AND account_id = $2 AND source = $3
+    `).get(id, accountId, source);
+    db.release();
+    return row ? await asSale(row) : undefined;
   }
 
   if (store === 'config') {
-    const row = database
-      .prepare(`
-        SELECT id, reference_month, working_days
-        FROM monthly_configs WHERE id = ? AND account_id = ?
-      `)
-      .get(id, accountId);
+    const row = await db.prepare(`
+      SELECT id, reference_month, working_days
+      FROM monthly_configs WHERE id = $1 AND account_id = $2
+    `).get(id, accountId);
+    db.release();
     return row ? asMonthlyConfig(row) : undefined;
   }
 
-  const row = database
-    .prepare(`
-      SELECT id, type, description, price_cents
-      FROM catalog_items WHERE id = ? AND account_id = ?
-    `)
-    .get(id, accountId);
+  const row = await db.prepare(`
+    SELECT id, type, description, price_cents
+    FROM catalog_items WHERE id = $1 AND account_id = $2
+  `).get(id, accountId);
+  db.release();
   return row ? asCatalogItem(row) : undefined;
 }
 
@@ -1114,7 +1013,7 @@ function sendMethodNotAllowed(response, allowedMethods) {
   );
 }
 
-function listDataRecords(store, accountId, searchParams) {
+async function listDataRecords(store, accountId, searchParams) {
   if (store === 'expenses') return listExpenses(accountId, searchParams);
   if (store === 'services') return listSales(accountId, 'service', searchParams);
   if (store === 'products') {
@@ -1124,21 +1023,21 @@ function listDataRecords(store, accountId, searchParams) {
   return listCatalogItems(accountId, searchParams);
 }
 
-function createExpense(body, accountId) {
+async function createExpense(body, accountId) {
   const record = parseExpenseInput(body);
-  insertExpense(record, accountId);
+  await insertExpense(record, accountId);
   return getDataRecord('expenses', record.id, accountId);
 }
 
-function createCatalogItem(body, accountId) {
+async function createCatalogItem(body, accountId) {
   const record = parseCatalogInput(body);
-  insertCatalogItem(record, accountId);
+  await insertCatalogItem(record, accountId);
   return getDataRecord('catalog', record.id, accountId);
 }
 
-function createSale(body, accountId, source) {
+async function createSale(body, accountId, source) {
   const record = parseSaleInput(body, source, { defaultCreatedAt: true });
-  withTransaction(() => insertSale(record, accountId, source));
+  await withTransaction(() => insertSale(record, accountId, source));
   return getDataRecord(
     source === 'service' ? 'services' : 'products',
     record.id,
@@ -1146,35 +1045,34 @@ function createSale(body, accountId, source) {
   );
 }
 
-function upsertMonthlyConfig(body, accountId) {
+async function upsertMonthlyConfig(body, accountId) {
   const record = parseConfigInput(body);
 
-  return withTransaction(() => {
-    const existing = database
-      .prepare(`
-        SELECT id
-        FROM monthly_configs
-        WHERE account_id = ? AND reference_month = ?
-      `)
-      .get(accountId, record.referenceMonth);
+  return await withTransaction(async () => {
+    const db = await getClient();
+    const existing = await db.prepare(`
+      SELECT id
+      FROM monthly_configs
+      WHERE account_id = $1 AND reference_month = $2
+    `).get(accountId, record.referenceMonth);
 
     if (existing) {
-      database
-        .prepare(`
-          UPDATE monthly_configs
-          SET working_days = ?, updated_at = ?
-          WHERE id = ? AND account_id = ?
-        `)
-        .run(record.workingDays, Date.now(), existing.id, accountId);
+      await db.prepare(`
+        UPDATE monthly_configs
+        SET working_days = $1, updated_at = $2
+        WHERE id = $3 AND account_id = $4
+      `).run(record.workingDays, Date.now(), existing.id, accountId);
+      db.release();
       return getDataRecord('config', existing.id, accountId);
     }
 
-    insertMonthlyConfig(record, accountId);
+    await insertMonthlyConfig(record, accountId);
+    db.release();
     return getDataRecord('config', record.id, accountId);
   });
 }
 
-function createDataRecord(store, body, accountId) {
+async function createDataRecord(store, body, accountId) {
   if (store === 'expenses') return createExpense(body, accountId);
   if (store === 'services') return createSale(body, accountId, 'service');
   if (store === 'products') {
@@ -1184,56 +1082,54 @@ function createDataRecord(store, body, accountId) {
   return createCatalogItem(body, accountId);
 }
 
-function updateCatalogItem(id, body, accountId) {
+async function updateCatalogItem(id, body, accountId) {
   const record = parseCatalogInput({ ...body, id }, { required: true });
-  const result = database
-    .prepare(`
-      UPDATE catalog_items
-      SET type = ?, description = ?, price_cents = ?, updated_at = ?
-      WHERE id = ? AND account_id = ?
-    `)
-    .run(
-      record.type,
-      record.description,
-      record.priceCents,
-      Date.now(),
-      id,
-      accountId,
-    );
+  const db = await getClient();
+  const result = await db.prepare(`
+    UPDATE catalog_items
+    SET type = $1, description = $2, price_cents = $3, updated_at = $4
+    WHERE id = $5 AND account_id = $6
+  `).run(
+    record.type,
+    record.description,
+    record.priceCents,
+    Date.now(),
+    id,
+    accountId,
+  );
 
   if (result.changes !== 1) throw requestError(404, 'not_found');
+  db.release();
   return getDataRecord('catalog', id, accountId);
 }
 
-function deleteDataRecord(store, id, accountId) {
+async function deleteDataRecord(store, id, accountId) {
+  const db = await getClient();
+
   if (store === 'expenses') {
-    database
-      .prepare('DELETE FROM expenses WHERE id = ? AND account_id = ?')
-      .run(id, accountId);
+    await db.prepare('DELETE FROM expenses WHERE id = $1 AND account_id = $2').run(id, accountId);
+    db.release();
     return;
   }
 
   if (store === 'services' || store === 'products') {
     const source = store === 'services' ? 'service' : 'legacy_product';
-    database
-      .prepare(`
-        DELETE FROM sales
-        WHERE id = ? AND account_id = ? AND source = ?
-      `)
-      .run(id, accountId, source);
+    await db.prepare(`
+      DELETE FROM sales
+      WHERE id = $1 AND account_id = $2 AND source = $3
+    `).run(id, accountId, source);
+    db.release();
     return;
   }
 
   if (store === 'config') {
-    database
-      .prepare('DELETE FROM monthly_configs WHERE id = ? AND account_id = ?')
-      .run(id, accountId);
+    await db.prepare('DELETE FROM monthly_configs WHERE id = $1 AND account_id = $2').run(id, accountId);
+    db.release();
     return;
   }
 
-  database
-    .prepare('DELETE FROM catalog_items WHERE id = ? AND account_id = ?')
-    .run(id, accountId);
+  await db.prepare('DELETE FROM catalog_items WHERE id = $1 AND account_id = $2').run(id, accountId);
+  db.release();
 }
 
 function parseImportPayload(body) {
@@ -1272,7 +1168,7 @@ function parseImportPayload(body) {
   };
 }
 
-function importData(body, accountId) {
+async function importData(body, accountId) {
   const records = parseImportPayload(body);
   const imported = {
     expenses: 0,
@@ -1282,33 +1178,33 @@ function importData(body, accountId) {
     catalog: 0,
   };
 
-  withTransaction(() => {
+  await withTransaction(async () => {
     for (const record of records.catalog) {
-      if (insertCatalogItem(record, accountId, { ignore: true })) {
+      if (await insertCatalogItem(record, accountId, { ignore: true })) {
         imported.catalog += 1;
       }
     }
 
     for (const record of records.expenses) {
-      if (insertExpense(record, accountId, { ignore: true })) {
+      if (await insertExpense(record, accountId, { ignore: true })) {
         imported.expenses += 1;
       }
     }
 
     for (const record of records.services) {
-      if (insertSale(record, accountId, 'service', { ignore: true })) {
+      if (await insertSale(record, accountId, 'service', { ignore: true })) {
         imported.services += 1;
       }
     }
 
     for (const record of records.products) {
-      if (insertSale(record, accountId, 'legacy_product', { ignore: true })) {
+      if (await insertSale(record, accountId, 'legacy_product', { ignore: true })) {
         imported.products += 1;
       }
     }
 
     for (const record of records.config) {
-      if (insertMonthlyConfig(record, accountId, { ignore: true })) {
+      if (await insertMonthlyConfig(record, accountId, { ignore: true })) {
         imported.config += 1;
       }
     }
@@ -1334,7 +1230,7 @@ async function handleDataRequest(request, response, url, session) {
     }
 
     const body = await readJson(request);
-    sendJson(response, 200, importData(body, session.account_id));
+    sendJson(response, 200, await importData(body, session.account_id));
     return;
   }
 
@@ -1351,21 +1247,15 @@ async function handleDataRequest(request, response, url, session) {
 
   if (!rawId) {
     if (request.method === 'GET') {
-      sendJson(
-        response,
-        200,
-        listDataRecords(store, session.account_id, url.searchParams),
-      );
+      const records = await listDataRecords(store, session.account_id, url.searchParams);
+      sendJson(response, 200, records);
       return;
     }
 
     if (request.method === 'POST') {
       const body = await readJson(request);
-      sendJson(
-        response,
-        201,
-        createDataRecord(store, body, session.account_id),
-      );
+      const record = await createDataRecord(store, body, session.account_id);
+      sendJson(response, 201, record);
       return;
     }
 
@@ -1376,21 +1266,21 @@ async function handleDataRequest(request, response, url, session) {
   const id = parseEntityId(rawId, { required: true });
 
   if (request.method === 'GET') {
-    const record = getDataRecord(store, id, session.account_id);
+    const record = await getDataRecord(store, id, session.account_id);
     if (!record) throw requestError(404, 'not_found');
     sendJson(response, 200, record);
     return;
   }
 
   if (request.method === 'DELETE') {
-    deleteDataRecord(store, id, session.account_id);
+    await deleteDataRecord(store, id, session.account_id);
     sendNoContent(response);
     return;
   }
 
   if (request.method === 'PUT' && store === 'catalog') {
     const body = await readJson(request);
-    sendJson(response, 200, updateCatalogItem(id, body, session.account_id));
+    sendJson(response, 200, await updateCatalogItem(id, body, session.account_id));
     return;
   }
 
@@ -1419,14 +1309,16 @@ async function handleApiRequest(request, response, url) {
   }
 
   if (request.method === 'GET' && pathname === '/api/health') {
-    const health = database.prepare('SELECT 1 AS healthy').get();
+    const db = await getClient();
+    const health = await db.prepare('SELECT 1 AS healthy').get();
+    db.release();
     if (health?.healthy !== 1) throw requestError(503, 'database_unavailable');
     sendJson(response, 200, { status: 'ok', database: 'ok' });
     return;
   }
 
   if (request.method === 'GET' && pathname === '/api/auth/session') {
-    const session = getAuthenticatedSession(request);
+    const session = await getAuthenticatedSession(request);
     sendJson(response, 200, {
       authenticated: Boolean(session),
       email: session?.email,
@@ -1443,9 +1335,11 @@ async function handleApiRequest(request, response, url) {
     const body = await readJson(request);
     const email = normalizeEmail(body.email);
     const password = String(body.password ?? '');
-    const account = database
-      .prepare('SELECT * FROM admin_accounts WHERE email = ? COLLATE NOCASE')
+    const db = await getClient();
+    const account = await db
+      .prepare('SELECT * FROM admin_accounts WHERE email = $1')
       .get(email);
+    db.release();
 
     if (!account || !verifyPassword(password, account)) {
       registerFailedLogin(request);
@@ -1454,7 +1348,7 @@ async function handleApiRequest(request, response, url) {
     }
 
     clearFailedLogins(request);
-    const token = createSession(account.id);
+    const token = await createSession(account.id);
     sendJson(
       response,
       200,
@@ -1465,11 +1359,13 @@ async function handleApiRequest(request, response, url) {
   }
 
   if (request.method === 'POST' && pathname === '/api/auth/logout') {
-    const session = getAuthenticatedSession(request);
+    const session = await getAuthenticatedSession(request);
     if (session) {
-      database
-        .prepare('DELETE FROM auth_sessions WHERE token_hash = ?')
+      const db = await getClient();
+      await db
+        .prepare('DELETE FROM auth_sessions WHERE token_hash = $1')
         .run(session.token_hash);
+      db.release();
     }
 
     sendJson(
@@ -1482,7 +1378,7 @@ async function handleApiRequest(request, response, url) {
   }
 
   if (request.method === 'PUT' && pathname === '/api/account') {
-    const session = getAuthenticatedSession(request);
+    const session = await getAuthenticatedSession(request);
     if (!session) {
       sendJson(response, 401, { error: 'authentication_required' });
       return;
@@ -1518,26 +1414,27 @@ async function handleApiRequest(request, response, url) {
       passwordSalt = credentials.salt;
     }
 
-    database
-      .prepare(`
-        UPDATE admin_accounts
-        SET email = ?, password_hash = ?, password_salt = ?, updated_at = ?
-        WHERE id = ?
-      `)
-      .run(
-        email,
-        passwordHash,
-        passwordSalt,
-        Date.now(),
-        session.account_id,
-      );
+    const db = await getClient();
+    await db.prepare(`
+      UPDATE admin_accounts
+      SET email = $1, password_hash = $2, password_salt = $3, updated_at = $4
+      WHERE id = $5
+    `).run(
+      email,
+      passwordHash,
+      passwordSalt,
+      Date.now(),
+      session.account_id,
+    );
 
-    database
+    await db
       .prepare(`
         DELETE FROM auth_sessions
-        WHERE account_id = ? AND token_hash <> ?
+        WHERE account_id = $1 AND token_hash <> $2
       `)
       .run(session.account_id, session.token_hash);
+
+    db.release();
 
     sendJson(response, 200, { updated: true, email });
     return;
@@ -1547,7 +1444,7 @@ async function handleApiRequest(request, response, url) {
     pathname === '/api/data/import' ||
     /^\/api\/(expenses|services|products|config|catalog)(?:\/|$)/.test(pathname)
   ) {
-    const session = getAuthenticatedSession(request);
+    const session = await getAuthenticatedSession(request);
     if (!session) {
       sendJson(response, 401, { error: 'authentication_required' });
       return;
@@ -1596,13 +1493,23 @@ function serveStaticFile(response, pathname) {
 
 const server = createServer(async (request, response) => {
   try {
-    const url = new URL(request.url ?? '/', 'http://localhost');
-    const pathname = decodeURIComponent(url.pathname);
+  const url = new URL(request.url ?? '/', 'http://localhost');
+  const pathname = decodeURIComponent(url.pathname);
 
-    if (pathname.startsWith('/api/')) {
+  if (pathname.startsWith('/api/')) {
+    try {
       await handleApiRequest(request, response, url);
-      return;
+    } catch (error) {
+      const statusCode = Number(error?.statusCode) || 500;
+      const errorCode =
+        typeof error?.errorCode === 'string' ? error.errorCode : 'request_failed';
+      if (statusCode >= 500) console.error(error);
+      if (!response.headersSent) {
+        sendJson(response, statusCode, { error: errorCode });
+      }
     }
+    return;
+  }
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       response.writeHead(405, { Allow: 'GET, HEAD' });
@@ -1626,13 +1533,12 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, host, () => {
   console.log(`Distrito API disponível em http://${host}:${port}`);
-  console.log(`Banco central: ${databasePath}`);
+  console.log(`Banco: ${getDbMode() === 'postgres' ? 'PostgreSQL (Neon)' : 'SQLite'}`);
 });
 
-function shutdown() {
+async function shutdown() {
   server.close(() => {
-    database.close();
-    process.exit(0);
+    closeDatabase().then(() => process.exit(0));
   });
 }
 

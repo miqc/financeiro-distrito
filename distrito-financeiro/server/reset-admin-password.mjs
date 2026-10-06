@@ -1,7 +1,10 @@
 import { randomBytes, scryptSync } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import {
+  initializeDatabase,
+  closeDatabase,
+  getClient,
+  getDbMode,
+} from './db/index.mjs';
 
 const password = process.argv[2];
 
@@ -11,12 +14,7 @@ if (!password) {
   );
 }
 
-const rootDirectory = resolve(process.cwd());
-const databasePath = resolve(
-  process.env.DATABASE_PATH ?? join(rootDirectory, 'data', 'distrito.sqlite'),
-);
-
-mkdirSync(dirname(databasePath), { recursive: true });
+await initializeDatabase();
 
 const salt = randomBytes(16);
 const passwordHash = scryptSync(password, salt, 64, {
@@ -25,35 +23,50 @@ const passwordHash = scryptSync(password, salt, 64, {
   p: 1,
   maxmem: 64 * 1024 * 1024,
 });
-const database = new DatabaseSync(databasePath);
 
-database.exec('BEGIN IMMEDIATE');
+const db = await getClient();
+const usesPostgres = getDbMode() === 'postgres';
 
 try {
-  const result = database
-    .prepare(`
-      UPDATE admin_accounts
-      SET password_hash = ?, password_salt = ?, updated_at = ?
-      WHERE id = 1
-    `)
-    .run(
-      passwordHash.toString('base64'),
-      salt.toString('base64'),
-      Date.now(),
-    );
+  if (usesPostgres) {
+    await db.query('BEGIN');
+  } else {
+    db.exec('BEGIN IMMEDIATE');
+  }
+
+  const result = await db.prepare(`
+    UPDATE admin_accounts
+    SET password_hash = $1, password_salt = $2, updated_at = $3
+    WHERE id = 1
+  `).run(
+    passwordHash.toString('base64'),
+    salt.toString('base64'),
+    Date.now(),
+  );
 
   if (result.changes !== 1) {
     throw new Error('A conta administrativa não foi encontrada.');
   }
 
-  database
+  await db
     .prepare('DELETE FROM auth_sessions WHERE account_id = 1')
     .run();
-  database.exec('COMMIT');
+
+  if (usesPostgres) {
+    await db.query('COMMIT');
+  } else {
+    db.exec('COMMIT');
+  }
+
   console.log('Senha administrativa redefinida e sessões encerradas.');
 } catch (error) {
-  database.exec('ROLLBACK');
+  if (usesPostgres) {
+    await db.query('ROLLBACK');
+  } else {
+    db.exec('ROLLBACK');
+  }
   throw error;
 } finally {
-  database.close();
+  db.release();
+  await closeDatabase();
 }
